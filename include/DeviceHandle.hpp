@@ -6,45 +6,56 @@
 
 #pragma once
 
-#include "HttpController.hpp"
+#include "Data.hpp"
+#include <boost/asio.hpp>
 
-namespace R2000 {
-
+namespace Device {
+    using HandleType = std::string;
     struct DeviceHandle {
     public:
         enum class PROTOCOL {
-            TCP, UDP
-        };
-        enum class PACKET_TYPE {
-            A, B, C
+            TCP,
+            UDP
         };
 
     public:
-        DeviceHandle(Handle_Id_Type value, const PACKET_TYPE packetType,
-                     const int startAngle, const bool watchdogEnabled,
-                     const std::chrono::milliseconds watchdogTimeout, const int port, boost::asio::ip::address hostname,
+        DeviceHandle(HandleType value, const Data::PACKET_TYPE packetType, const int startAngle,
+                     const bool watchdogEnabled,
+                     const std::chrono::milliseconds watchdogTimeout, const unsigned short port,
+                     boost::asio::ip::address hostname,
                      const PROTOCOL aProtocol)
                 : value(std::move(value)),
                   packetType(packetType),
                   startAngle(startAngle),
-                  watchdogEnabled(
-                          watchdogEnabled),
-                  watchdogTimeout(
-                          watchdogTimeout),
+                  watchdogEnabled(watchdogEnabled),
+                  watchdogTimeout(watchdogTimeout),
                   port(port),
                   hostname(std::move(hostname)),
-                  protocol(aProtocol){}
+                  protocol(aProtocol) {
+        }
 
         virtual ~DeviceHandle() = default;
-        [[maybe_unused]] const Handle_Id_Type value{};
-        [[maybe_unused]] const PACKET_TYPE packetType{};
+
+        [[maybe_unused]] const HandleType value{};
+        [[maybe_unused]] const Data::PACKET_TYPE packetType{};
         [[maybe_unused]] const int startAngle{};
         [[maybe_unused]] const bool watchdogEnabled{};
         [[maybe_unused]] const std::chrono::milliseconds watchdogTimeout{};
-        [[maybe_unused]] const int port{};
+        [[maybe_unused]] const unsigned short port{};
         [[maybe_unused]] const boost::asio::ip::address hostname{boost::asio::ip::address::from_string("0.0.0.0")};
         [[maybe_unused]] const PROTOCOL protocol{};
     };
-    std::string packetTypeToString(DeviceHandle::PACKET_TYPE type);
 
-}
+    inline std::string packetTypeToString(Data::PACKET_TYPE type) {
+        switch (type) {
+            case Data::PACKET_TYPE::A:
+                return "A";
+            case Data::PACKET_TYPE::B:
+                return "B";
+            case Data::PACKET_TYPE::C:
+                return "C";
+        }
+        return "C";
+    }
+
+} // namespace Device

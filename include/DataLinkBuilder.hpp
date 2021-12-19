@@ -6,16 +6,16 @@
 
 #pragma once
 
-#include "HttpController.hpp"
-#include "DeviceHandle.hpp"
 #include "DataLink/TCPLink.hpp"
 #include "DataLink/UDPLink.hpp"
+#include "DeviceHandle.hpp"
+#include "R2000.hpp"
 #include <chrono>
 #include <utility>
 
 using namespace std::chrono_literals;
 
-namespace R2000 {
+namespace Device {
     class builder_exception : public std::invalid_argument {
     public:
         explicit builder_exception(const std::string &what) : std::invalid_argument(what) {};
@@ -101,6 +101,7 @@ namespace R2000 {
 
     class DataLinkBuilder {
     public:
+
         DataLinkBuilder &withProtocol(DeviceHandle::PROTOCOL protocol) {
             requirements.put("protocol", protocol);
             return *this;
@@ -121,7 +122,7 @@ namespace R2000 {
             return *this;
         }
 
-        DataLinkBuilder &withPacketType(DeviceHandle::PACKET_TYPE packetType) {
+        DataLinkBuilder &withPacketType(Data::PACKET_TYPE packetType) {
             requirements.put("packet_type", packetType);
             return *this;
         }
@@ -131,100 +132,85 @@ namespace R2000 {
             return *this;
         }
 
-        DataLinkBuilder &withWatchdogTimeout(std::chrono::milliseconds watchdogTimeout) {
+        DataLinkBuilder &withWatchdogTimeoutInMs(const unsigned int watchdogTimeout) {
             requirements.put("watchdog_timeout", watchdogTimeout);
             return *this;
         }
 
-        std::unique_ptr<DataLink> build(const std::shared_ptr<R2000::HttpController> &controller) noexcept(false) {
+        std::shared_ptr<DataLink> build(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
             try {
-                return build_and_potentially_throw(controller);
+                return build_and_potentially_throw(device);
             }
             catch (std::exception &e) {
                 internals::print_nested_exception(e);
-                internals::rethrow(__func__, "Shockwave device builder has failed.");
+                internals::rethrow(__func__, "Device builder has failed.");
             }
             return {nullptr};
         }
 
     private:
-
-
-        std::unique_ptr<DataLink>
-        build_and_potentially_throw(const std::shared_ptr<R2000::HttpController> &controller) noexcept(false) {
-            const auto protocol = internals::cast_any_or_throw<R2000::DeviceHandle::PROTOCOL>(
-                    requirements.get("protocol"),
-                    "Could not get the protocol parameter. You must specify it using the"
-                    " method withProtocol(...)"
-            );
-            const auto startAngle = internals::cast_any_or_throw<int>(requirements.get("start_angle"),
-                                                                      "Could not get the start angle parameter. You must specify it using the"
-                                                                      " method withStartAngle(...)");
-            const auto packetType = internals::cast_any_or_throw<R2000::DeviceHandle::PACKET_TYPE>(
+        std::shared_ptr<DataLink>
+        build_and_potentially_throw(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
+            const auto protocol{internals::cast_any_or_throw<Device::DeviceHandle::PROTOCOL>(
+                    requirements.get("protocol"), "Could not get the protocol parameter. You must specify it using the"
+                                                  " method withProtocol(...)")};
+            const auto startAngle{internals::cast_any_or_throw<int>(
+                    requirements.get("start_angle"),
+                    "Could not get the start angle parameter. You must specify it using the"
+                    " method withStartAngle(...)")};
+            const auto packetType{internals::cast_any_or_throw<Device::Data::PACKET_TYPE>(
                     requirements.get("packet_type"),
-                    "Could not get the packet type parameter. You must specify it using the method withPacketType(...)");
+                    "Could not get the packet type parameter. You must specify it using the method withPacketType(...)")};
 
-            switch (packetType) {
-                case DeviceHandle::PACKET_TYPE::A:
-                    throw builder_exception(
-                            std::string(__func__) + " -> Packet type A is not yet supported by the data link.");
-                case DeviceHandle::PACKET_TYPE::B:
-                    throw builder_exception(
-                            std::string(__func__) + " -> Packet type B is not yet supported by the data link.");
-                default:
-                    break;
+            const auto watchdogEnabled{
+                    internals::cast_any_or_default<bool>(requirements.get("watchdog_enabled"), false)};
+            const auto watchdogTimeout{
+                    internals::cast_any_or_default<unsigned int>(requirements.get("watchdog_timeout"), 100)};
+
+
+            std::unordered_map<std::string, std::string> handleParameters{};
+            handleParameters["packet_type"] = Device::packetTypeToString(packetType);
+            handleParameters["start_angle"] = std::to_string(startAngle);
+            if (watchdogEnabled) {
+                handleParameters["watchdog"] = "on";
+                handleParameters["watchdogtimeout"] = std::to_string(watchdogTimeout);
+            } else {
+                handleParameters["watchdog"] = "off";
             }
-
-            const auto watchdogEnabled = internals::cast_any_or_default<bool>(
-                    requirements.get("watchdog_enabled"), false);
-            const auto watchdogTimeout = internals::cast_any_or_default<std::chrono::milliseconds>(
-                    requirements.get("watchdog_timeout"), 100ms);
-
-            std::unordered_map<std::string, std::string> parameters;
-            parameters["packet_type"] = R2000::packetTypeToString(packetType);
-            parameters["start_angle"] = std::to_string(startAngle);
-            const auto hostname = internals::cast_any_or_throw<std::string>(requirements.get("hostname"),
-                                                                            "Could not get the hostname. "
-                                                                            "You must specify it using the method withTargetHostname(...)");
+            const auto hostname{internals::cast_any_or_throw<std::string>(
+                    requirements.get("hostname"), "Could not get the hostname. "
+                                                  "You must specify it using the method withTargetHostname(...)")};
             switch (protocol) {
-
                 case DeviceHandle::PROTOCOL::TCP: {
-                    const auto result = controller->sendHttpCommand("request_handle_tcp", parameters);
-                    const auto status = result.first;
-                    const auto &propertyTree = result.second;
-                    if (!status || !R2000::HttpController::verifyErrorCode(propertyTree))
+                    const auto result{Device::Commands::RequestTcpHandleCommand{*device}.execute(handleParameters)};
+                    if (!result)
                         return {nullptr};
-                    const auto port = propertyTree.get_optional<int>("port");
-                    const auto handle = propertyTree.get_optional<std::string>("handle");
-                    if (!port || !handle)
-                        return {nullptr};
-                    const auto h = std::make_shared<DeviceHandle>(*handle, packetType, startAngle,
-                                                                  watchdogEnabled,
-                                                                  watchdogTimeout, *port,
-                                                                  boost::asio::ip::address::from_string(hostname),
-                                                                  DeviceHandle::PROTOCOL::TCP);
-                    return std::make_unique<TCPLink>(controller, h);
-
+                    const auto &deviceAnswer{result.value()};
+                    const auto port{deviceAnswer.first};
+                    const auto handle{deviceAnswer.second};
+                    const auto deviceHandle{std::make_shared<DeviceHandle>(
+                            handle, packetType, startAngle, watchdogEnabled, std::chrono::milliseconds(watchdogTimeout),
+                            port,
+                            boost::asio::ip::address::from_string(hostname), DeviceHandle::PROTOCOL::TCP)};
+                    return std::make_shared<TCPLink>(device, deviceHandle);
                 }
                 case DeviceHandle::PROTOCOL::UDP: {
-                    const auto port = internals::cast_any_or_throw<unsigned short>(requirements.get("port"),
-                                                                                   "Could not get the UDP port parameter. You must specify it using the"
-                                                                                   " method withPort(...)");
-                    parameters["port"] = std::to_string(port);
-                    parameters["address"] = hostname;
-                    const auto result = controller->sendHttpCommand("request_handle_udp", parameters);
-                    const auto status = result.first;
-                    const auto &propertyTree = result.second;
-                    if (!status || !R2000::HttpController::verifyErrorCode(propertyTree))
+                    const auto port{internals::cast_any_or_throw<unsigned short>(
+                            requirements.get("port"),
+                            "Could not get the UDP port parameter. You must specify it using the"
+                            " method withPort(...)")};
+                    handleParameters["port"] = std::to_string(port);
+                    handleParameters["address"] = hostname;
+                    const auto result{Device::Commands::RequestUdpHandleCommand{*device}.execute(handleParameters)};
+                    if (!result)
                         return {nullptr};
-                    const auto handle = propertyTree.get_optional<std::string>("handle");
-                    if (!handle)
-                        return {nullptr};
-                    const auto h = std::make_shared<DeviceHandle>(*handle, packetType, startAngle, watchdogEnabled,
-                                                                  watchdogTimeout, port,
-                                                                  boost::asio::ip::address::from_string(hostname),
-                                                                  DeviceHandle::PROTOCOL::UDP);
-                    return std::make_unique<UDPLink>(controller, h);
+                    const auto &deviceAnswer{result.value()};
+                    const auto handle{deviceAnswer};
+                    const auto deviceHandle{std::make_shared<DeviceHandle>(
+                            handle, packetType, startAngle, watchdogEnabled, std::chrono::milliseconds(watchdogTimeout),
+                            port,
+                            boost::asio::ip::address::from_string(hostname), DeviceHandle::PROTOCOL::UDP)};
+                    return std::make_shared<UDPLink>(device, deviceHandle);
                 }
             }
             return {nullptr};
@@ -234,4 +220,4 @@ namespace R2000 {
         internals::Requirements<std::string> requirements{};
     };
 
-}
+} // namespace Device

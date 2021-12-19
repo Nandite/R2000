@@ -22,18 +22,34 @@ find_package(Boost 1.58.0 COMPONENTS program_options filesystem REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 ############################################################################
 
+# PCL Package ##############################################################
+find_package(PCL 1.8 REQUIRED)
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
+############################################################################
+
 # JSONCPP Package ##########################################################
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSONCPP jsoncpp)
 link_libraries(${JSONCPP_LIBRARIES})
 ############################################################################
 
-add_executable(R2000 include
-        DataLink/DataLink.cpp
-        DataLink/TCPLink.cpp
-        DataLink/UDPLink.cpp
-        DeviceHandle.cpp
-        HttpController.cpp
-        main.cpp)
-target_link_libraries(R2000 ${CMAKE_DL_LIBS}
+add_executable(DataLinkFunctionsTest include
+        src/DataLink/DataLink.cpp
+        src/DataLink/TCPLink.cpp
+        src/DataLink/UDPLink.cpp
+        src/R2000.cpp
+        StreamManipulationTest.cpp include/ScanConverter.hpp)
+target_link_libraries(DataLinkFunctionsTest ${CMAKE_DL_LIBS}
         ${Boost_LIBRARIES} ${JSONCPP_LIBRARIES})
+
+add_executable(DataLinkTest include
+        src/DataLink/DataLink.cpp
+        src/DataLink/TCPLink.cpp
+        src/DataLink/UDPLink.cpp
+        src/R2000.cpp
+        src/Backtrace.cpp
+        DataLinkTest.cpp)
+target_link_libraries(DataLinkTest ${CMAKE_DL_LIBS}
+        ${Boost_LIBRARIES}  ${PCL_LIBRARIES} ${JSONCPP_LIBRARIES})
