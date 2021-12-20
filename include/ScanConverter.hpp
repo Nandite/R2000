@@ -19,7 +19,7 @@ namespace PointCloud {
 
     public:
         /**
-         * @brief Construct a new instance of this converter ParameterChaining a given set of parameters used by the P&F sensor.
+         * @brief Construct a new instance of this converter with a given set of parameters used by the P&F sensor.
          * @param N The number of points provided by the sensor for each scan.
          * @param thetaMin The minimal angle between each point of the scan.
          * @param maxRange The maximal range of the points to output to the scanned cloud.

@@ -375,7 +375,7 @@ enum class ThreadType
 };
 
 //==============================================================================
-/** Useful class to synchronise access to an object from multiple threads ParameterChaining the additional feature that one
+/** Useful class to synchronise access to an object from multiple threads with the additional feature that one
  * designated thread will never wait to get access to the object. */
 template <typename T, RealtimeObjectOptions Options> class RealtimeObject
 {
@@ -420,7 +420,7 @@ public:
      */
     void realtimeRelease() noexcept { mImpl.realtimeRelease(); }
 
-    /** Replace the underlying value ParameterChaining a new instance of T by forwarding
+    /** Replace the underlying value with a new instance of T by forwarding
      *  the method's arguments to T's constructor
      */
     template <RealtimeObjectOptions O = Options, typename... Args>
@@ -448,7 +448,7 @@ public:
      */
     void nonRealtimeRelease() { mImpl.nonRealtimeRelease(); }
 
-    /** Replace the underlying value ParameterChaining a new instance of T by forwarding
+    /** Replace the underlying value with a new instance of T by forwarding
      *  the method's arguments to T's constructor
      */
     template <RealtimeObjectOptions O = Options, typename... Args>

@@ -15,34 +15,33 @@ Device::UDPLink::UDPLink(std::shared_ptr<R2000> device, std::shared_ptr<DeviceHa
           receptionByteBuffer(DATAGRAM_SIZE, 0),
           extractionByteBuffer(std::floor(DATAGRAM_SIZE * 1.5), 0) {
 
-    const auto hostname{mHandle->hostname};
     const auto port{mHandle->port};
     boost::asio::ip::udp::endpoint listenEndpoint{boost::asio::ip::udp::v4(), port};
     boost::system::error_code openError{};
     if (!socket->is_open()) {
         socket->open(listenEndpoint.protocol(), openError);
         if (openError) {
-            std::clog << "Could not open the reading socket to " << hostname << ":" << port << " ParameterChaining ("
+            std::clog << "Could not open the socket to read from " << mDevice->getHostname() << ":" << port << " with ("
                       << openError.message() << ")" << std::endl;
         }
     }
     boost::system::error_code optionError{};
     socket->template set_option(boost::asio::ip::udp::socket::reuse_address(true), optionError);
     if (optionError) {
-        std::clog << "Could not set the reuse option on the reading socket to " << hostname << ":"
-                  << port << " ParameterChaining ("
+        std::clog << "Could not set the reuse option on the socket to read from " << mDevice->getHostname() << ":"
+                  << port << " with ("
                   << optionError.message() << ")" << std::endl;
     }
     boost::system::error_code bindError{};
     socket->bind(listenEndpoint, bindError);
     if (bindError) {
-        std::clog << "Could not bind the reading socket to " << hostname << ":"
-                  << port << " ParameterChaining ("
+        std::clog << "Could not bind the socket to read from " << mDevice->getHostname() << ":"
+                  << port << " with ("
                   << bindError.message() << ")" << std::endl;
     }
     if (openError || optionError || bindError) {
         std::clog << __func__ << ":: Could not setup the Udp socket." << std::endl;
-        releaseResources();
+        mIsConnected.store(false, std::memory_order_release);
     } else {
         mIsConnected.store(true, std::memory_order_release);
         socket->async_receive_from(boost::asio::buffer(receptionByteBuffer), endPoint,
@@ -89,10 +88,17 @@ void Device::UDPLink::handleBytesReception(const boost::system::error_code &erro
                                    });
     } else {
         std::clog << __func__ << ":: Network error (" << error.message() << ")" << std::endl;
-        releaseResources();
+        mIsConnected.store(false, std::memory_order_release);
     }
 }
 
 Device::UDPLink::~UDPLink() {
-    releaseResources();
+    if (!ioService.stopped())
+        ioService.stop();
+    if (ioServiceThread.joinable())
+        ioServiceThread.join();
+    boost::system::error_code placeholder;
+    socket->shutdown(boost::asio::ip::udp::socket::shutdown_receive, placeholder);
+    socket->close(placeholder);
+    mIsConnected.store(false, std::memory_order_release);
 }

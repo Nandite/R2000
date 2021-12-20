@@ -23,24 +23,18 @@ namespace Device::Data {
         return static_cast<std::underlying_type_t<E>>(enumerator);
     }
 
-    enum class PACKET_TYPE : uint16_t {
-        A = 0x0041,
-        B = 0x0042,
-        C = 0x0043
-    };
-
     struct Header {
         // Magic bytes, must be  5C A2 (hex)
         std::uint16_t magic{};
         // Packet type, must be 43 00 (hex)
         std::uint16_t packetType{};
-        // Overall packet size (header+payload), 1404 bytes ParameterChaining maximum payload
+        // Overall packet size (header+payload), 1404 bytes with maximum payload
         std::uint32_t packetSize{};
         // Header size, defaults to 60 bytes
         std::uint16_t headerSize{};
-        // Sequence for scan (incremented for every scan, starting ParameterChaining 0, overflows)
+        // Sequence for scan (incremented for every scan, starting with 0, overflows)
         std::uint16_t scanNumber{};
-        // Sequence number for packet (counting packets of a particular scan, starting ParameterChaining 1)
+        // Sequence number for packet (counting packets of a particular scan, starting with 1)
         std::uint16_t packetNumber{};
         // Raw timestamp of internal clock in NTP time format
         std::uint64_t timestampRaw{};
@@ -93,7 +87,7 @@ namespace Device::Data {
         std::vector<std::uint32_t> distances{};
         // Amplitude data in the range 32-4095, values lower than 32 indicate an error or undefined values
         std::vector<std::uint32_t> amplitudes{};
-        // Header received ParameterChaining the distance and amplitude data
+        // Header received with the distance and amplitude data
         std::vector<Header> headers{};
         // Timestamp of the scan
         std::chrono::steady_clock::time_point timestamp;

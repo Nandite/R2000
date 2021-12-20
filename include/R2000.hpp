@@ -22,14 +22,80 @@
 #include <boost/assign/list_of.hpp>
 #include <boost/unordered_map.hpp>
 
+#define BOOL_PARAMETER_TRUE "on"
+#define BOOL_PARAMETER_FALSE "off"
 
-#define ADD_RO_PARAMETER_BUILDER(F_NAME, RETURN_TYPE, PARAMETER_NAME) \
+#define ADD_RO_PARAMETER_BUILDER_METHOD(F_NAME, RETURN_TYPE, PARAMETER_NAME) \
 RETURN_TYPE & F_NAME () \
 {                                                                     \
    parameters.push_back(PARAMETER_NAME); \
    return *this; \
 }
 
+#define ADD_RO_PARAMETER_BUILDER_METHOD_2(F_NAME, RETURN_TYPE, PARAMETER_NAME_1, PARAMETER_NAME_2) \
+RETURN_TYPE & F_NAME () \
+{                                                                     \
+   parameters.push_back(PARAMETER_NAME_1);                                                            \
+   parameters.push_back(PARAMETER_NAME_2); \
+   return *this; \
+}
+
+#define ADD_RW_PARAMETER_BUILDER_METHOD(F_NAME, RETURN_TYPE, \
+                        ARGUMENT_TYPE, \
+                        ARGUMENT_NAME, \
+                        PARAMETER_NAME) \
+RETURN_TYPE & F_NAME (ARGUMENT_TYPE ARGUMENT_NAME) \
+{                                                                     \
+   parameters[PARAMETER_NAME] = ARGUMENT_NAME; \
+   return *this; \
+}
+
+#define ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(F_NAME, RETURN_TYPE, \
+                        ARGUMENT_TYPE, \
+                        ARGUMENT_NAME,                                      \
+                        ARGUMENT_TRANSFORM,                                 \
+                        PARAMETER_NAME) \
+[[nodiscard]]RETURN_TYPE& F_NAME (ARGUMENT_TYPE ARGUMENT_NAME) \
+{                                                                     \
+   parameters[PARAMETER_NAME] = ARGUMENT_TRANSFORM; \
+   return *this; \
+}
+
+#define ADD_RW_PARAMETER_BUILDER_METHOD_2(F_NAME, RETURN_TYPE, \
+                        ARGUMENT_TYPE_1, \
+                        ARGUMENT_NAME_1, \
+                        PARAMETER_NAME_1,                       \
+                        ARGUMENT_TYPE_2,                       \
+                        ARGUMENT_NAME_2, \
+                        PARAMETER_NAME_2) \
+RETURN_TYPE & F_NAME (ARGUMENT_TYPE_1 ARGUMENT_NAME_1, ARGUMENT_TYPE_2 ARGUMENT_NAME_2) \
+{                                                                     \
+   parameters[PARAMETER_NAME_1] = ARGUMENT_NAME_1;             \
+   parameters[PARAMETER_NAME_2] = ARGUMENT_NAME_2;             \
+   return *this; \
+}
+
+#define ADD_RW_PARAMETER_BUILDER_METHOD_ON(F_NAME, RETURN_TYPE, \
+                        PARAMETER_NAME) \
+[[nodiscard]]RETURN_TYPE& F_NAME () \
+{                                                                     \
+   parameters[PARAMETER_NAME] = BOOL_PARAMETER_TRUE; \
+   return *this; \
+}
+
+#define ADD_RW_PARAMETER_BUILDER_METHOD_OFF(F_NAME, RETURN_TYPE, \
+                        PARAMETER_NAME) \
+[[nodiscard]]RETURN_TYPE& F_NAME () \
+{                                                                     \
+   parameters[PARAMETER_NAME] = BOOL_PARAMETER_FALSE; \
+   return *this; \
+}
+
+#define ADD_BUILD_BUILDER_METHOD(F_NAME, RETURN_TYPE, RETURN_ARGUMENT_NAME) \
+[[nodiscard]] RETURN_TYPE F_NAME () const\
+{                                                                     \
+   return RETURN_ARGUMENT_NAME; \
+}
 
 #define COMMAND_RELEASE_HANDLE "release_handle"
 #define COMMAND_START_SCAN_OUTPUT "start_scanoutput"
@@ -47,8 +113,6 @@ RETURN_TYPE & F_NAME () \
 #define PARAMETER_NAME_HANDLE "handle"
 #define PARAMETER_NAME_LIST "parametersList"
 
-#define PARAMETER_VALUE_STATUS_FLAG "status_flags"
-#define PARAMETER_VALUE_APPLICATION_TEXT "application_text"
 
 #define ERROR_CODE "error_code"
 #define ERROR_TEXT "error_text"
@@ -92,13 +156,12 @@ RETURN_TYPE & F_NAME () \
 #define PARAMETER_HMI_BUTTON_LOCK "hmi_button_lock"
 #define PARAMETER_HMI_PARAMETER_LOCK "hmi_parameter_lock"
 #define PARAMETER_LOCATOR_INDICATION "locator_indication"
-#define PARAMETER_NAME_HMI_DISPLAY_MODE "hmi_display_mode"
-#define PARAMETER_NAME_HMI_STATIC_LOGO "hmi_static_logo"
-#define PARAMETER_NAME_HMI_STATIC_TEXT_1 "hmi_static_text_1"
-#define PARAMETER_NAME_HMI_STATIC_TEXT_2 "hmi_static_text_2"
-#define PARAMETER_NAME_HMI_APPLICATION_BITMAP "hmi_application_bitmap"
-#define PARAMETER_NAME_HMI_APPLICATION_TEXT_1 "hmi_application_text_1"
-#define PARAMETER_NAME_HMI_APPLICATION_TEXT_2 "hmi_application_text_2"
+#define PARAMETER_HMI_STATIC_LOGO "hmi_static_logo"
+#define PARAMETER_HMI_STATIC_TEXT_1 "hmi_static_text_1"
+#define PARAMETER_HMI_STATIC_TEXT_2 "hmi_static_text_2"
+#define PARAMETER_HMI_APPLICATION_BITMAP "hmi_application_bitmap"
+#define PARAMETER_HMI_APPLICATION_TEXT_1 "hmi_application_text_1"
+#define PARAMETER_HMI_APPLICATION_TEXT_2 "hmi_application_text_2"
 #define PARAMETER_USER_TAG "user_tag"
 #define PARAMETER_USER_NOTES "user_notes"
 #define PARAMETER_LOCATOR_INDICATION "locator_indication"
@@ -112,6 +175,16 @@ RETURN_TYPE & F_NAME () \
 #define PARAMETER_TEMPERATURE_CURRENT "temperature_current"
 #define PARAMETER_TEMPERATURE_MIN "temperature_min"
 #define PARAMETER_TEMPERATURE_MAX "temperature_max"
+
+#define PARAMETER_HANDLE_ADDRESS "address"
+#define PARAMETER_HANDLE_PORT "port"
+#define PARAMETER_HANDLE_WATCHDOG "watchdog"
+#define PARAMETER_HANDLE_WATCHDOG_TIMEOUT "watchdogtimeout"
+#define PARAMETER_HANDLE_PACKET_TYPE "packet_type"
+#define PARAMETER_HANDLE_PACKET_CRC "packet_crc"
+#define PARAMETER_HANDLE_START_ANGLE "start_angle"
+#define PARAMETER_HANDLE_MAX_NUM_POINTS_SCAN "max_num_points_scan"
+#define PARAMETER_HANDLE_SKIP_SCANS "skip_scans"
 
 using namespace std::chrono_literals;
 
@@ -184,6 +257,17 @@ namespace Device {
         CCW
     };
 
+    enum class CRC {
+        NONE,
+        CRC32C
+    };
+
+    enum class PACKET_TYPE : uint16_t {
+        A = 0x0041,
+        B = 0x0042,
+        C = 0x0043
+    };
+
     namespace internals::Parameters {
 
         struct RoParametersTags {
@@ -198,6 +282,8 @@ namespace Device {
             struct EthernetTag;
             struct MeasuringTag;
             struct HmiDisplayTag;
+            struct HandleUdpTag;
+            struct HandleTcpTag;
         };
 
         template<typename Section>
@@ -205,37 +291,26 @@ namespace Device {
 
         template<>
         struct ParametersBuilderImpl<RwParametersTags::BasicInformationTag> {
-            ParametersBuilderImpl &withUserTag(const std::string &userTag) {
-                parameters[PARAMETER_USER_TAG] = userTag;
-                return *this;
-            }
 
-            ParametersBuilderImpl &withUserNotes(const std::string &userNotes) {
-                parameters[PARAMETER_USER_NOTES] = userNotes;
-                return *this;
-            }
+            ADD_RW_PARAMETER_BUILDER_METHOD(withUserTag,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            userTag,
+                                            PARAMETER_USER_TAG);
 
-            [[nodiscard]] ParametersMap build() const {
-                return parameters;
-            }
-
+            ADD_RW_PARAMETER_BUILDER_METHOD(withUserNotes,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            userNotes,
+                                            PARAMETER_USER_NOTES);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersMap, parameters);
             struct AsList
             {
-                AsList &withUserTag() {
-                    parametersList.push_back(PARAMETER_USER_TAG);
-                    return *this;
-                }
-
-                AsList &withUserNotes() {
-                    parametersList.push_back(PARAMETER_USER_NOTES);
-                    return *this;
-                }
-
-                [[nodiscard]] ParametersList build() const {
-                    return parametersList;
-                }
+                ADD_RO_PARAMETER_BUILDER_METHOD(withUserTag, AsList, PARAMETER_USER_TAG);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withUserNotes, AsList, PARAMETER_USER_NOTES);
+                ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
             private:
-                ParametersList parametersList;
+                ParametersList parameters;
             };
 
         private:
@@ -244,62 +319,46 @@ namespace Device {
 
         template<>
         struct ParametersBuilderImpl<RwParametersTags::EthernetTag> {
-            ParametersBuilderImpl &withIpMode(IpMode mode) {
-                parameters[PARAMETER_IP_MODE] = IpModeToString.at(mode);
-                return *this;
-            }
 
-            ParametersBuilderImpl &withIpAddress(const std::string &ipAddress) {
-                parameters[PARAMETER_IP_ADDRESS] = ipAddress;
-                return *this;
-            }
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withIpMode,
+                                                           ParametersBuilderImpl,
+                                                           IpMode,
+                                                           mode,
+                                                           IpModeToString.at(mode),
+                                                           PARAMETER_IP_ADDRESS);
 
-            ParametersBuilderImpl &withSubnetMask(const std::string &subnetMask) {
-                parameters[PARAMETER_SUBNET_MASK] = subnetMask;
-                return *this;
-            }
+            ADD_RW_PARAMETER_BUILDER_METHOD(withIpAddress,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            ipAddress,
+                                            PARAMETER_IP_ADDRESS);
 
-            ParametersBuilderImpl &withGateway(const std::string &gateway) {
-                parameters[PARAMETER_GATEWAY] = gateway;
-                return *this;
-            }
+            ADD_RW_PARAMETER_BUILDER_METHOD(withSubnetMask,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            subnetMask,
+                                            PARAMETER_SUBNET_MASK);
 
+            ADD_RW_PARAMETER_BUILDER_METHOD(withGateway,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            gateway,
+                                            PARAMETER_GATEWAY);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersMap, parameters);
             struct AsList
             {
-                AsList &withIpMode() {
-                    parametersList.push_back(PARAMETER_IP_MODE);
-                    return *this;
-                }
-
-                AsList &withIpAddress() {
-                    parametersList.push_back(PARAMETER_IP_ADDRESS);
-                    return *this;
-                }
-
-                AsList &withSubnetMask() {
-                    parametersList.push_back(PARAMETER_SUBNET_MASK);
-                    return *this;
-                }
-
-                AsList &withGateway() {
-                    parametersList.push_back(PARAMETER_GATEWAY);
-                    return *this;
-                }
-
-                [[nodiscard]] ParametersList build() const {
-                    return parametersList;
-                }
+                ADD_RO_PARAMETER_BUILDER_METHOD(withIpMode, AsList, PARAMETER_IP_MODE);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withIpAddress, AsList, PARAMETER_IP_ADDRESS);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withSubnetMask, AsList, PARAMETER_SUBNET_MASK);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withGateway, AsList, PARAMETER_GATEWAY);
+                ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
             private:
-                ParametersList parametersList;
+                ParametersList parameters;
             };
-
-            [[nodiscard]] ParametersMap build() const {
-                return parameters;
-            }
 
         private:
             ParametersMap parameters;
-            const boost::unordered_map<IpMode, const char *> IpModeToString = boost::assign::map_list_of
+            const boost::unordered_map<IpMode, std::string> IpModeToString = boost::assign::map_list_of
                     (IpMode::STATIC, "static")
                     (IpMode::DHCP, "dhcp")
                     (IpMode::AUTO_IP, "autoip");
@@ -307,65 +366,51 @@ namespace Device {
 
         template<>
         struct ParametersBuilderImpl<RwParametersTags::MeasuringTag> {
-            ParametersBuilderImpl &withOperatingMode(OPERATING_MODE operatingMode) {
-                parameters[PARAMETER_OPERATING_MODE] = operatingModeToString.at(operatingMode);
-                return *this;
-            }
 
-            ParametersBuilderImpl &withScanFrequency(const std::string &scanFrequency) {
-                parameters[PARAMETER_SCAN_FREQUENCY] = scanFrequency;
-                return *this;
-            }
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withOperatingMode,
+                                                           ParametersBuilderImpl,
+                                                           OPERATING_MODE,
+                                                           operatingMode,
+                                                           operatingModeToString.at(operatingMode),
+                                                           PARAMETER_OPERATING_MODE);
 
-            ParametersBuilderImpl &withScanDirection(SCAN_DIRECTION scanDirection) {
-                parameters[PARAMETER_SCAN_DIRECTION] = scanDirectionToString.at(scanDirection);
-                return *this;
-            }
+            ADD_RW_PARAMETER_BUILDER_METHOD(withScanFrequency,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            scanFrequency,
+                                            PARAMETER_SCAN_FREQUENCY);
 
-            ParametersBuilderImpl &withSamplesPerScan(const std::string &samplesPerScan) {
-                parameters[PARAMETER_SAMPLES_PER_SCAN] = samplesPerScan;
-                return *this;
-            }
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withScanDirection,
+                                                           ParametersBuilderImpl,
+                                                           SCAN_DIRECTION,
+                                                           scanDirection,
+                                                           scanDirectionToString.at(scanDirection),
+                                                           PARAMETER_SCAN_DIRECTION);
 
-            [[nodiscard]] ParametersMap build() const {
-                return parameters;
-            }
+            ADD_RW_PARAMETER_BUILDER_METHOD(withSamplesPerScan,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            samplesPerScan,
+                                            PARAMETER_SAMPLES_PER_SCAN);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersMap, parameters);
 
             struct AsList
             {
-                AsList &withOperatingMode() {
-                    parametersList.push_back(PARAMETER_OPERATING_MODE);
-                    return *this;
-                }
-
-                AsList &withScanFrequency() {
-                    parametersList.push_back(PARAMETER_SCAN_FREQUENCY);
-                    return *this;
-                }
-
-                AsList &withScanDirection() {
-                    parametersList.push_back(PARAMETER_SCAN_DIRECTION);
-                    return *this;
-                }
-
-                AsList &withSamplesPerScan() {
-                    parametersList.push_back(PARAMETER_SAMPLES_PER_SCAN);
-                    return *this;
-                }
-
-                [[nodiscard]] ParametersList build() const {
-                    return parametersList;
-                }
+                ADD_RO_PARAMETER_BUILDER_METHOD(withOperatingMode, AsList, PARAMETER_OPERATING_MODE);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withScanFrequency, AsList, PARAMETER_SCAN_FREQUENCY);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withScanDirection, AsList, PARAMETER_SCAN_DIRECTION);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withSamplesPerScan, AsList, PARAMETER_SAMPLES_PER_SCAN);
+                ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
             private:
-                ParametersList parametersList;
+                ParametersList parameters;
             };
 
         private:
             ParametersMap parameters;
-            const boost::unordered_map<OPERATING_MODE, const char *> operatingModeToString = boost::assign::map_list_of
+            const boost::unordered_map<OPERATING_MODE, std::string> operatingModeToString = boost::assign::map_list_of
                     (OPERATING_MODE::MEASURE, "measure")
                     (OPERATING_MODE::EMITTER_OFF, "emitter_off");
-            const boost::unordered_map<SCAN_DIRECTION, const char *> scanDirectionToString = boost::assign::map_list_of
+            const boost::unordered_map<SCAN_DIRECTION, std::string> scanDirectionToString = boost::assign::map_list_of
                     (SCAN_DIRECTION::CW, "cw")
                     (SCAN_DIRECTION::CCW, "ccw");
         };
@@ -373,138 +418,77 @@ namespace Device {
         template<>
         struct ParametersBuilderImpl<RwParametersTags::HmiDisplayTag> {
 
-            ParametersBuilderImpl &withHmiDisplayMode(HMI_DISPLAY_MODE displayMode) {
-                parameters[PARAMETER_HMI_DISPLAY_MODE] = HmiDisplayModeToString.at(displayMode);
-                return *this;
-            }
-
-            ParametersBuilderImpl &withHmiLanguage(Language language) {
-                parameters[PARAMETER_HMI_LANGUAGE] = LanguageToString.at(language);
-                return *this;
-            }
-
-            ParametersBuilderImpl &lockHmiButton() {
-                parameters[PARAMETER_HMI_BUTTON_LOCK] = "on";
-                return *this;
-            }
-
-            ParametersBuilderImpl &unlockHmiButton() {
-                parameters[PARAMETER_HMI_BUTTON_LOCK] = "off";
-                return *this;
-            }
-
-            ParametersBuilderImpl &lockHmiParameters() {
-                parameters[PARAMETER_HMI_PARAMETER_LOCK] = "on";
-                return *this;
-            }
-
-            ParametersBuilderImpl &unlockHmiParameters() {
-                parameters[PARAMETER_HMI_PARAMETER_LOCK] = "off";
-                return *this;
-            }
-
-            ParametersBuilderImpl &enableLEDLocatorIndication() {
-                parameters[PARAMETER_LOCATOR_INDICATION] = "on";
-                return *this;
-            }
-
-            ParametersBuilderImpl &disableLEDLocatorIndication() {
-                parameters[PARAMETER_LOCATOR_INDICATION] = "off";
-                return *this;
-            }
-
-            ParametersBuilderImpl &withHmiStaticLogo(const std::string &base64Logo) {
-                withHmiDisplayMode(HMI_DISPLAY_MODE::STATIC_LOGO);
-                parameters[PARAMETER_NAME_HMI_STATIC_LOGO] = base64Logo;
-                return *this;
-            }
-
-            ParametersBuilderImpl &withHmiStaticText(const std::string &line1, const std::string &line2) {
-                withHmiDisplayMode(HMI_DISPLAY_MODE::STATIC_TEXT);
-                parameters[PARAMETER_NAME_HMI_STATIC_TEXT_1] = line1;
-                parameters[PARAMETER_NAME_HMI_STATIC_TEXT_2] = line2;
-                return *this;
-            }
-
-            ParametersBuilderImpl &withHmiApplicationBitmap(const std::string &base64Bitmap) {
-                withHmiDisplayMode(HMI_DISPLAY_MODE::APPLICATION_BITMAP);
-                parameters[PARAMETER_NAME_HMI_APPLICATION_BITMAP] = base64Bitmap;
-                return *this;
-            }
-
-            ParametersBuilderImpl &withHmiApplicationText(const std::string &line1, const std::string &line2) {
-                withHmiDisplayMode(HMI_DISPLAY_MODE::APPLICATION_TEXT);
-                parameters[PARAMETER_NAME_HMI_APPLICATION_TEXT_1] = line1;
-                parameters[PARAMETER_NAME_HMI_APPLICATION_TEXT_2] = line2;
-                return *this;
-            }
-
-            [[nodiscard]] ParametersMap build() const {
-                return parameters;
-            }
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withHmiDisplayMode,
+                                                           ParametersBuilderImpl,
+                                                           HMI_DISPLAY_MODE,
+                                                           displayMode,
+                                                           HmiDisplayModeToString.at(displayMode),
+                                                           PARAMETER_HMI_DISPLAY_MODE);
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withHmiLanguage,
+                                                           ParametersBuilderImpl,
+                                                           Language,
+                                                           language,
+                                                           LanguageToString.at(language),
+                                                           PARAMETER_HMI_LANGUAGE);
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(lockHmiButton, ParametersBuilderImpl, PARAMETER_HMI_BUTTON_LOCK);
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(unlockHmiButton, ParametersBuilderImpl, PARAMETER_HMI_BUTTON_LOCK);
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(lockHmiParameters, ParametersBuilderImpl, PARAMETER_HMI_PARAMETER_LOCK);
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(unlockHmiParameters, ParametersBuilderImpl, PARAMETER_HMI_PARAMETER_LOCK);
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(enableLEDLocatorIndication, ParametersBuilderImpl, PARAMETER_LOCATOR_INDICATION);
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(disableLEDLocatorIndication, ParametersBuilderImpl, PARAMETER_LOCATOR_INDICATION);
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiStaticLogo,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            base64Logo,
+                                            PARAMETER_HMI_STATIC_LOGO);
+            ADD_RW_PARAMETER_BUILDER_METHOD_2(withHmiStaticText,
+                                              ParametersBuilderImpl,
+                                              const std::string &,
+                                              line1,
+                                              PARAMETER_HMI_STATIC_TEXT_1,
+                                              const std::string &,
+                                              line2,
+                                              PARAMETER_HMI_STATIC_TEXT_2);
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiApplicationBitmap,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            base64Bitmap,
+                                            PARAMETER_HMI_APPLICATION_BITMAP);
+            ADD_RW_PARAMETER_BUILDER_METHOD_2(withHmiApplicationText,
+                                              ParametersBuilderImpl,
+                                              const std::string &,
+                                              line1,
+                                              PARAMETER_HMI_APPLICATION_TEXT_1,
+                                              const std::string &,
+                                              line2,
+                                              PARAMETER_HMI_APPLICATION_TEXT_2);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersMap, parameters);
 
             struct AsList
             {
-                AsList &withHmiDisplayMode() {
-                    parametersList.push_back(PARAMETER_HMI_DISPLAY_MODE);
-                    return *this;
-                }
+                ADD_RO_PARAMETER_BUILDER_METHOD(withHmiDisplayMode, AsList, PARAMETER_HMI_DISPLAY_MODE);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withHmiLanguage, AsList, PARAMETER_HMI_LANGUAGE);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withLockHmiButton, AsList, PARAMETER_HMI_BUTTON_LOCK);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withLockHmiParameters, AsList, PARAMETER_HMI_PARAMETER_LOCK);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withLEDLocatorIndication, AsList, PARAMETER_LOCATOR_INDICATION);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withHmiStaticLogo, AsList, PARAMETER_HMI_STATIC_LOGO);
+                ADD_RO_PARAMETER_BUILDER_METHOD_2(withHmiStaticText, AsList, PARAMETER_HMI_STATIC_TEXT_1,
+                                                  PARAMETER_HMI_STATIC_TEXT_2);
+                ADD_RO_PARAMETER_BUILDER_METHOD(withHmiApplicationBitmap, AsList, PARAMETER_HMI_APPLICATION_BITMAP);
+                ADD_RO_PARAMETER_BUILDER_METHOD_2(withHmiApplicationText, AsList, PARAMETER_HMI_APPLICATION_TEXT_1,
+                                                  PARAMETER_HMI_APPLICATION_TEXT_2);
+                ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
 
-                AsList &withHmiLanguage() {
-                    parametersList.push_back(PARAMETER_HMI_LANGUAGE);
-                    return *this;
-                }
-
-                AsList &withLockHmiButton() {
-                    parametersList.push_back(PARAMETER_HMI_BUTTON_LOCK);
-                    return *this;
-                }
-
-                AsList &withLockHmiParameters() {
-                    parametersList.push_back(PARAMETER_HMI_PARAMETER_LOCK);
-                    return *this;
-                }
-
-                AsList &withLEDLocatorIndication() {
-                    parametersList.push_back(PARAMETER_LOCATOR_INDICATION);
-                    return *this;
-                }
-
-                AsList &withHmiStaticLogo() {
-                    parametersList.push_back(PARAMETER_NAME_HMI_STATIC_LOGO);
-                    return *this;
-                }
-
-                AsList &withHmiStaticText() {
-                    parametersList.push_back(PARAMETER_NAME_HMI_STATIC_TEXT_1);
-                    parametersList.push_back(PARAMETER_NAME_HMI_STATIC_TEXT_2);
-                    return *this;
-                }
-
-                AsList &withHmiApplicationBitmap() {
-                    parametersList.push_back(PARAMETER_NAME_HMI_APPLICATION_BITMAP);
-                    return *this;
-                }
-
-                AsList &withHmiApplicationText() {
-                    parametersList.push_back(PARAMETER_NAME_HMI_APPLICATION_TEXT_1);
-                    parametersList.push_back(PARAMETER_NAME_HMI_APPLICATION_TEXT_2);
-                    return *this;
-                }
-
-                [[nodiscard]] ParametersList build() const {
-                    return parametersList;
-                }
             private:
-                ParametersList parametersList;
+                ParametersList parameters;
             };
 
         private:
             ParametersMap parameters;
-            const boost::unordered_map<Language, const char *> LanguageToString = boost::assign::map_list_of
+            const boost::unordered_map<Language, std::string> LanguageToString = boost::assign::map_list_of
                     (Language::ENGLISH, "english")
                     (Language::GERMAN, "german");
-            const boost::unordered_map<HMI_DISPLAY_MODE, const char *> HmiDisplayModeToString = boost::assign::map_list_of
+            const boost::unordered_map<HMI_DISPLAY_MODE, std::string> HmiDisplayModeToString = boost::assign::map_list_of
                     (HMI_DISPLAY_MODE::OFF, "off")
                     (HMI_DISPLAY_MODE::STATIC_LOGO, "static_logo")
                     (HMI_DISPLAY_MODE::STATIC_TEXT, "static_text")
@@ -515,236 +499,207 @@ namespace Device {
                     (HMI_DISPLAY_MODE::APPLICATION_TEXT, "application_text");
         };
 
+        struct HandleParameters
+        {
+            const boost::unordered_map<PACKET_TYPE, std::string> scanPacketString = boost::assign::map_list_of
+                    (PACKET_TYPE::A, "A")
+                    (PACKET_TYPE::B, "B")
+                    (PACKET_TYPE::C, "C");
+            const boost::unordered_map<CRC, std::string> crcToString = boost::assign::map_list_of
+                    (CRC::NONE, "none")
+                    (CRC::CRC32C, "crc32c");
+        };
+
         template<>
-        struct ParametersBuilderImpl<RoParametersTags::BasicInformationTag> {
+        struct ParametersBuilderImpl<RwParametersTags::HandleTcpTag> : public HandleParameters {
 
-            ADD_RO_PARAMETER_BUILDER(requestDeviceFamily, ParametersBuilderImpl, PARAMETER_DEVICE_FAMILY);
-            ADD_RO_PARAMETER_BUILDER(requestVendor, ParametersBuilderImpl, PARAMETER_VENDOR);
-            ADD_RO_PARAMETER_BUILDER(requestProduct, ParametersBuilderImpl, PARAMETER_PRODUCT);
-            ADD_RO_PARAMETER_BUILDER(requestPart, ParametersBuilderImpl, PARAMETER_PART);
-            ADD_RO_PARAMETER_BUILDER(requestSerial, ParametersBuilderImpl, PARAMETER_SERIAL);
-            ADD_RO_PARAMETER_BUILDER(requestFirmwareRevision, ParametersBuilderImpl, PARAMETER_REVISION_FW);
-            ADD_RO_PARAMETER_BUILDER(requestHardwareRevision, ParametersBuilderImpl, PARAMETER_REVISION_HW);
-
-//            ParametersBuilderImpl &requestDeviceFamily() {
-//                parameters.push_back(PARAMETER_DEVICE_FAMILY);
-//                return *this;
-//            }
-
-//            ParametersBuilderImpl &requestVendor() {
-//                parameters.push_back(PARAMETER_VENDOR);
-//                return *this;
-//            }
-
-//            ParametersBuilderImpl &requestProduct() {
-//                parameters.push_back(PARAMETER_PRODUCT);
-//                return *this;
-//            }
-
-//            ParametersBuilderImpl &requestPart() {
-//                parameters.push_back(PARAMETER_PART);
-//                return *this;
-//            }
-
-//            ParametersBuilderImpl &requestSerial() {
-//                parameters.push_back(PARAMETER_SERIAL);
-//                return *this;
-//            }
-
-//            ParametersBuilderImpl &requestFirmwareRevision() {
-//                parameters.push_back(PARAMETER_REVISION_FW);
-//                return *this;
-//            }
-
-//            ParametersBuilderImpl &requestHardwareRevision() {
-//                parameters.push_back(PARAMETER_REVISION_HW);
-//                return *this;
-//            }
-
-            [[nodiscard]] ParametersList build() const {
-                return parameters;
+            ParametersBuilderImpl() {
+                parameters[PARAMETER_HANDLE_WATCHDOG] = "off";
             }
 
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(withWatchdog, ParametersBuilderImpl, PARAMETER_HANDLE_WATCHDOG);
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(withoutWatchdog, ParametersBuilderImpl, PARAMETER_HANDLE_WATCHDOG);
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withWatchdogTimeout,
+                                                           ParametersBuilderImpl,
+                                                           const unsigned int,
+                                                           watchdogtimeout,
+                                                           std::to_string(watchdogtimeout),
+                                                           PARAMETER_HANDLE_WATCHDOG_TIMEOUT);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketType,
+                                                           ParametersBuilderImpl,
+                                                           PACKET_TYPE,
+                                                           packetType,
+                                                           scanPacketString.at(packetType),
+                                                           PARAMETER_HANDLE_PACKET_TYPE);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketCrc,
+                                                           ParametersBuilderImpl,
+                                                           CRC,
+                                                           crcType,
+                                                           crcToString.at(crcType),
+                                                           PARAMETER_HANDLE_PACKET_CRC);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withStartAngle,
+                                                           ParametersBuilderImpl,
+                                                           const int ,
+                                                           startAngle,
+                                                           std::to_string(startAngle),
+                                                           PARAMETER_HANDLE_START_ANGLE);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfPointsPerScan,
+                                                           ParametersBuilderImpl,
+                                                           const unsigned int ,
+                                                           numberOfPointsPerScan,
+                                                           std::to_string(numberOfPointsPerScan),
+                                                           PARAMETER_HANDLE_MAX_NUM_POINTS_SCAN);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfScanToSkip,
+                                                           ParametersBuilderImpl,
+                                                           const unsigned int ,
+                                                           numberOfScanToSkip,
+                                                           std::to_string(numberOfScanToSkip),
+                                                           PARAMETER_HANDLE_SKIP_SCANS);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersMap, parameters);
+        private:
+            ParametersMap parameters;
+
+        };
+
+        template<>
+        struct ParametersBuilderImpl<RwParametersTags::HandleUdpTag> : public HandleParameters {
+
+            ParametersBuilderImpl() {
+                parameters[PARAMETER_HANDLE_WATCHDOG] = "off";
+            }
+
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHostname,
+                                            ParametersBuilderImpl,
+                                            const std::string &,
+                                            hostname,
+                                            PARAMETER_HANDLE_ADDRESS);
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPort,
+                                            ParametersBuilderImpl,
+                                            const uint16_t ,
+                                            port,
+                                            std::to_string(port),
+                                            PARAMETER_HANDLE_PORT);
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(withWatchdog, ParametersBuilderImpl, PARAMETER_HANDLE_WATCHDOG);
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(withoutWatchdog, ParametersBuilderImpl, PARAMETER_HANDLE_WATCHDOG);
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withWatchdogTimeout,
+                                            ParametersBuilderImpl,
+                                            const unsigned int,
+                                            watchdogtimeout,
+                                            std::to_string(watchdogtimeout),
+                                            PARAMETER_HANDLE_WATCHDOG_TIMEOUT);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketType,
+                                                           ParametersBuilderImpl,
+                                                           PACKET_TYPE,
+                                                           packetType,
+                                                           scanPacketString.at(packetType),
+                                                           PARAMETER_HANDLE_PACKET_TYPE);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketCrc,
+                                                           ParametersBuilderImpl,
+                                                           CRC,
+                                                           crcType,
+                                                           crcToString.at(crcType),
+                                                           PARAMETER_HANDLE_PACKET_CRC);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withStartAngle,
+                                                           ParametersBuilderImpl,
+                                                           const int ,
+                                                           startAngle,
+                                                           std::to_string(startAngle),
+                                                           PARAMETER_HANDLE_START_ANGLE);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfPointsPerScan,
+                                                           ParametersBuilderImpl,
+                                                           const unsigned int ,
+                                                           numberOfPointsPerScan,
+                                                           std::to_string(numberOfPointsPerScan),
+                                                           PARAMETER_HANDLE_MAX_NUM_POINTS_SCAN);
+
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfScanToSkip,
+                                                           ParametersBuilderImpl,
+                                                           const unsigned int ,
+                                                           numberOfScanToSkip,
+                                                           std::to_string(numberOfScanToSkip),
+                                                           PARAMETER_HANDLE_SKIP_SCANS);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersMap, parameters);
+        private:
+            ParametersMap parameters;
+        };
+
+        template<>
+        struct ParametersBuilderImpl<RoParametersTags::BasicInformationTag> {
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestDeviceFamily, ParametersBuilderImpl, PARAMETER_DEVICE_FAMILY);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestVendor, ParametersBuilderImpl, PARAMETER_VENDOR);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestProduct, ParametersBuilderImpl, PARAMETER_PRODUCT);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestPart, ParametersBuilderImpl, PARAMETER_PART);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestSerial, ParametersBuilderImpl, PARAMETER_SERIAL);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestFirmwareRevision, ParametersBuilderImpl, PARAMETER_REVISION_FW);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestHardwareRevision, ParametersBuilderImpl, PARAMETER_REVISION_HW);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
         private:
             ParametersList parameters;
         };
 
         template<>
         struct ParametersBuilderImpl<RoParametersTags::CapabilitiesTag> {
-            ParametersBuilderImpl &requestFeatureFlags() {
-                parameters.push_back(PARAMETER_FEATURE_FLAGS);
-                return *this;
-            }
 
-            ParametersBuilderImpl &requestEmitterType() {
-                parameters.push_back(PARAMETER_EMITTER_TYPE);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestRadialMinRange() {
-                parameters.push_back(PARAMETER_RADIAL_RANGE_MIN);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestRadialMaxRange() {
-                parameters.push_back(PARAMETER_RADIAL_RANGE_MAX);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestRadialResolution() {
-                parameters.push_back(PARAMETER_RADIAL_RESOLUTION);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestAngularFov() {
-                parameters.push_back(PARAMETER_ANGULAR_FOV);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestAngularResolution() {
-                parameters.push_back(PARAMETER_ANGULAR_RESOLUTION);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestMinimalScanFrequency() {
-                parameters.push_back(PARAMETER_SCAN_FREQUENCY_MIN);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestMaximalScanFrequency() {
-                parameters.push_back(PARAMETER_SCAN_FREQUENCY_MAX);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestMinimalSamplingRate() {
-                parameters.push_back(PARAMETER_SAMPLING_RATE_MIN);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestMaximalSamplingRate() {
-                parameters.push_back(PARAMETER_SAMPLING_RATE_MAX);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestMaximalConnections() {
-                parameters.push_back(PARAMETER_MAX_CONNECTIONS);
-                return *this;
-            }
-
-            [[nodiscard]] ParametersList build() const {
-                return parameters;
-            }
-
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestFeatureFlags, ParametersBuilderImpl, PARAMETER_FEATURE_FLAGS);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestEmitterType, ParametersBuilderImpl, PARAMETER_EMITTER_TYPE);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestRadialMinRange, ParametersBuilderImpl, PARAMETER_RADIAL_RANGE_MIN);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestRadialMaxRange, ParametersBuilderImpl, PARAMETER_RADIAL_RANGE_MAX);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestRadialResolution, ParametersBuilderImpl, PARAMETER_RADIAL_RESOLUTION);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestAngularFov, ParametersBuilderImpl, PARAMETER_ANGULAR_FOV);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestAngularResolution, ParametersBuilderImpl, PARAMETER_ANGULAR_RESOLUTION);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMinimalScanFrequency, ParametersBuilderImpl, PARAMETER_SCAN_FREQUENCY_MIN);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalScanFrequency, ParametersBuilderImpl, PARAMETER_SCAN_FREQUENCY_MAX);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMinimalSamplingRate, ParametersBuilderImpl, PARAMETER_SAMPLING_RATE_MIN);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalSamplingRate, ParametersBuilderImpl, PARAMETER_SAMPLING_RATE_MAX);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalConnections, ParametersBuilderImpl, PARAMETER_MAX_CONNECTIONS);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
         private:
             ParametersList parameters;
         };
 
         template<>
         struct ParametersBuilderImpl<RoParametersTags::EthernetTag> {
-            ParametersBuilderImpl &requestCurrentIpMode() {
-                parameters.push_back(PARAMETER_IP_MODE_CURRENT);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestCurrentIpAddress() {
-                parameters.push_back(PARAMETER_IP_ADDRESS_CURRENT);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestCurrentSubnetMask() {
-                parameters.push_back(PARAMETER_SUBNET_MASK_CURRENT);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestCurrentGateway() {
-                parameters.push_back(PARAMETER_GATEWAY_CURRENT);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestMacAddress() {
-                parameters.push_back(PARAMETER_MAC_ADDRESS);
-                return *this;
-            }
-
-            [[nodiscard]] ParametersList build() const {
-                return parameters;
-            }
-
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentIpMode, ParametersBuilderImpl, PARAMETER_IP_MODE_CURRENT);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentIpAddress, ParametersBuilderImpl, PARAMETER_IP_ADDRESS_CURRENT);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentSubnetMask, ParametersBuilderImpl, PARAMETER_SUBNET_MASK_CURRENT);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentGateway, ParametersBuilderImpl, PARAMETER_GATEWAY_CURRENT);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMacAddress, ParametersBuilderImpl, PARAMETER_MAC_ADDRESS);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
         private:
             ParametersList parameters;
         };
 
         template<>
         struct ParametersBuilderImpl<RoParametersTags::MeasuringTag> {
-            ParametersBuilderImpl &requestMeasuredFrequency() {
-                parameters.push_back(PARAMETER_SCAN_FREQUENCY_MEASURED);
-                return *this;
-            }
-
-            [[nodiscard]] ParametersList build() const {
-                return parameters;
-            }
-
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMeasuredFrequency, ParametersBuilderImpl,
+                                            PARAMETER_SCAN_FREQUENCY_MEASURED);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
         private:
             ParametersList parameters;
         };
 
         template<>
         struct ParametersBuilderImpl<RoParametersTags::SystemStatusTag> {
-            ParametersBuilderImpl &requestStatusFlags() {
-                parameters.push_back(PARAMETER_STATUS_FLAGS);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestLoadIndication() {
-                parameters.push_back(PARAMETER_LOAD_INDICATION);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestSystemTimeRaw() {
-                parameters.push_back(PARAMETER_SYSTEM_TIME_RAW);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestUpTime() {
-                parameters.push_back(PARAMETER_UP_TIME);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestPowerCycles() {
-                parameters.push_back(PARAMETER_POWER_CYCLES);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestOperationTime() {
-                parameters.push_back(PARAMETER_OPERATION_TIME);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestOperationTimeScaled() {
-                parameters.push_back(PARAMETER_OPERATION_TIME_SCALED);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestCurrentTemperature() {
-                parameters.push_back(PARAMETER_TEMPERATURE_CURRENT);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestMinimalTemperature() {
-                parameters.push_back(PARAMETER_TEMPERATURE_MIN);
-                return *this;
-            }
-
-            ParametersBuilderImpl &requestMaximalTemperature() {
-                parameters.push_back(PARAMETER_TEMPERATURE_MAX);
-                return *this;
-            }
-
-            [[nodiscard]] ParametersList build() const {
-                return parameters;
-            }
-
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestStatusFlags, ParametersBuilderImpl, PARAMETER_STATUS_FLAGS);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestLoadIndication, ParametersBuilderImpl, PARAMETER_LOAD_INDICATION);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestSystemTimeRaw, ParametersBuilderImpl, PARAMETER_SYSTEM_TIME_RAW);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestUpTime, ParametersBuilderImpl, PARAMETER_UP_TIME);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestPowerCycles, ParametersBuilderImpl, PARAMETER_POWER_CYCLES);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestOperationTime, ParametersBuilderImpl, PARAMETER_OPERATION_TIME);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestOperationTimeScaled, ParametersBuilderImpl, PARAMETER_OPERATION_TIME_SCALED);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentTemperature, ParametersBuilderImpl, PARAMETER_TEMPERATURE_CURRENT);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMinimalTemperature, ParametersBuilderImpl, PARAMETER_TEMPERATURE_MIN);
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalTemperature, ParametersBuilderImpl, PARAMETER_TEMPERATURE_MAX);
+            ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
         private:
             ParametersList parameters;
         };
@@ -780,12 +735,16 @@ namespace Device {
                     internals::Parameters::RwParametersTags::MeasuringTag>;
             using HmiDisplay = internals::Parameters::ParametersBuilderImpl<
                     internals::Parameters::RwParametersTags::HmiDisplayTag>;
+            using UdpHandle = internals::Parameters::ParametersBuilderImpl<
+                    internals::Parameters::RwParametersTags::HandleUdpTag>;
+            using TcpHandle = internals::Parameters::ParametersBuilderImpl<
+                    internals::Parameters::RwParametersTags::HandleTcpTag>;
         };
 
     }
 
-    using ReadParametersBuilder = internals::Parameters::ParametersBuilder<internals::Parameters::RO>;
-    using WriteParametersBuilder = internals::Parameters::ParametersBuilder<internals::Parameters::RW>;
+    using ROParameters = internals::Parameters::ParametersBuilder<internals::Parameters::RO>;
+    using RWParameters = internals::Parameters::ParametersBuilder<internals::Parameters::RW>;
 
     class R2000 {
     private:
@@ -807,29 +766,34 @@ namespace Device {
         [[maybe_unused]] static std::shared_ptr<R2000> makeShared(const DeviceConfiguration &configuration);
 
         /**
-         * Use this method in order to send an HTTP Command ParameterChaining only one parameter and its corresponding value.
+         * Use this method in order to send an HTTP Command with only one parameter and its corresponding value.
          * @param command Give a command among the available commands of the device.
          * @param parameters Give a parameter among the available parameters of the device.
          * @param values Give a value to the corresponding parameter
-         * @return The method ParameterChaining the given command, parameter and its corresponding value if the parameter is not empty.
+         * @return The method with the given command, parameter and its corresponding value if the parameter is not empty.
          */
         [[nodiscard]] std::pair<bool, Device::PropertyTree>
         sendHttpCommand(const std::string &command, const std::string &parameters = "",
                         std::string values = "") const noexcept(false);
 
         /**
-         * Use this method in order to send an HTTP Command ParameterChaining several parameters and their corresponding value.
+         * Use this method in order to send an HTTP Command with several parameters and their corresponding value.
          * @param command Give a command among the available commands of the device.
-         * @param paramValues Give many parameters ParameterChaining their corresponding value.
-         * @return The method ParameterChaining the given command, parameters and values if the HTTP Status code is equal to 200, an
+         * @param paramValues Give many parameters with their corresponding value.
+         * @return The method with the given command, parameters and values if the HTTP Status code is equal to 200, an
          * error otherwise.
          */
         [[nodiscard]] std::pair<bool, Device::PropertyTree>
         sendHttpCommand(const std::string &command, const ParametersMap &parameters) const noexcept(false);
+
+        [[nodiscard]] inline auto getHostname() const {
+            return mConfiguration.deviceAddress;
+        }
+
     private:
         /**
          * Send a HTTP GET request to the device.
-         * @param requestPath The last part of an URL ParameterChaining a slash leading.
+         * @param requestPath The last part of an URL with a slash leading.
          * @param header The response header returned as std::string.
          * @return The HTTP status code or 0 in case of an error.
          */
@@ -870,18 +834,18 @@ namespace Device {
         {};
 
         template<typename... Args>
-        struct ParameterChaining {
+        struct ParametersChaining {
             template<typename T>
-            static constexpr inline void resolve(ParametersList &list, T &builder) {
+            static constexpr inline void chain(ParametersList &list, T &builder) {
                 const auto parameters{builder.build()};
                 list.insert(std::end(list), std::cbegin(parameters), std::cend(parameters));
             }
 
             template<typename T0, typename... Rest>
-            static constexpr inline void resolve(ParametersList &list, T0 &builder, Args &&... args) {
+            static constexpr inline void chain(ParametersList &list, T0 &builder, Args &&... args) {
                 const auto parameters{builder.build()};
                 list.insert(std::end(list), std::cbegin(parameters), std::cend(parameters));
-                resolve<>(list, std::forward<Args>(args)...);
+                chain<>(list, std::forward<Args>(args)...);
             }
         };
 
@@ -1061,7 +1025,7 @@ namespace Device {
             template<typename ... Args>
             inline bool execute(Args&&... args) {
                 ParametersList parameters{};
-                ParameterChaining<Args...>::resolve(parameters, std::forward<Args>(args)...);
+                ParametersChaining<Args...>::chain(parameters, std::forward<Args>(args)...);
                 return resetParameters(parameters);
             }
 
@@ -1141,7 +1105,7 @@ namespace Device {
             std::optional<bool> isRebooting() noexcept(true) {
                 try {
                     CommandExecutorImpl<internals::Parameters::CommandTags::GetParameters> executor{device};
-                    const auto result{executor.execute(ReadParametersBuilder::SystemStatus().requestStatusFlags())};
+                    const auto result{executor.execute(ROParameters::SystemStatus().requestStatusFlags())};
                     if (!result.empty()) {
                         const auto statusFlags{result.at(PARAMETER_STATUS_FLAGS)};
                         const auto value{std::stoi(statusFlags)};

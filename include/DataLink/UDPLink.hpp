@@ -110,19 +110,6 @@ namespace Device {
          */
         void handleBytesReception(const boost::system::error_code &error, unsigned int byteTransferred);
 
-        /**
-         *
-         */
-        void inline releaseResources() {
-            if (!ioService.stopped())
-                ioService.stop();
-            if (ioServiceThread.joinable())
-                ioServiceThread.join();
-            boost::system::error_code placeholder;
-            socket->shutdown(boost::asio::ip::udp::socket::shutdown_receive, placeholder);
-            socket->close(placeholder);
-            mIsConnected.store(false, std::memory_order_release);
-        }
     private:
         boost::asio::io_service ioService{};
         std::unique_ptr<boost::asio::ip::udp::socket> socket{nullptr};

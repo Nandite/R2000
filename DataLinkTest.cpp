@@ -35,42 +35,46 @@ int main() {
     const auto device{Device::R2000::makeShared(deviceConfiguration)};
 
     std::this_thread::sleep_for(2s);
-
     Device::Commands::SetParametersCommand setParametersCommand{*device};
-    const auto hmiParametersBuilder{Device::WriteParametersBuilder::HmiDisplay()
+    const auto hmiParameters{Device::RWParameters::HmiDisplay()
                                             .unlockHmiButton()
                                             .unlockHmiParameters()
                                             .withHmiLanguage(Device::Language::ENGLISH)
                                             .withHmiDisplayMode(Device::HMI_DISPLAY_MODE::APPLICATION_TEXT)
                                             .withHmiApplicationText("Spook", ".../\\...")};
-    const auto measureParametersBuilder{Device::WriteParametersBuilder::Measure()
+    const auto measureParameters{Device::RWParameters::Measure()
                                                 .withOperatingMode(Device::OPERATING_MODE::MEASURE)
                                                 .withScanFrequency(std::to_string(35.0f))
                                                 .withSamplesPerScan(std::to_string(7200))
                                                 .withScanDirection(Device::SCAN_DIRECTION::CCW)};
-    if (!setParametersCommand.execute(hmiParametersBuilder, measureParametersBuilder)) {
+    if (!setParametersCommand.execute(hmiParameters, measureParameters)) {
         std::clog << "Could not set the parameters on the sensor." << std::endl;
         return EXIT_FAILURE;
     }
 
     try {
-        const auto dataLink{Device::DataLinkBuilder()
-                                    .withProtocol(Device::DeviceHandle::PROTOCOL::UDP)
-                                    .withPacketType(Device::Data::PACKET_TYPE::C)
-                                    .withStartAngle(-1800000)
-                                    .withPort(43000)
-                                    .withTargetHostname("192.168.1.15")
-                                    .withWatchdogEnabled()
-                                    .withWatchdogTimeoutInMs(20000)
+        const auto dataLink{Device::DataLinkBuilder(Device::RWParameters::TcpHandle{}
+                                                      .withWatchdog()
+                                                      .withWatchdogTimeout(20000)
+                                                      .withPacketType(Device::PACKET_TYPE::A)
+                                                      .withStartAngle(-1800000))
                                     .build(device)};
+
+//        const auto dataLink{Device::DataLinkBuilder(Device::RWParameters::UdpHandle{}
+//                                                            .withHostname("192.168.1.15")
+//                                                            .withPort(43000)
+//                                                            .withWatchdog()
+//                                                            .withWatchdogTimeout(20000)
+//                                                            .withPacketType(Device::PACKET_TYPE::A)
+//                                                            .withStartAngle(-1800000))
+//                                    .build(device)};
         if (dataLink && dataLink->isAlive()) {
-            std::cout << "Data link established ParameterChaining sensor at " << deviceConfiguration.deviceAddress << std::endl;
+            std::cout << "Data link established with sensor at " << deviceConfiguration.deviceAddress << std::endl;
         } else {
-            std::clog << "Could not establish data link ParameterChaining sensor at " << deviceConfiguration.deviceAddress
+            std::clog << "Could not establish data link with sensor at " << deviceConfiguration.deviceAddress
                       << std::endl;
             return EXIT_FAILURE;
         }
-
 
         viewer.addCoordinateSystem(150.0f, 0.0f, 0.0f, 0.0f, "Zero");
         PointCloud::ScanToPointCloud<Point> converter(7200, -M_PI);
@@ -87,7 +91,7 @@ int main() {
 
     }
     catch (...) {
-        std::clog << "Could not establish data link ParameterChaining sensor at " << deviceConfiguration.deviceAddress << std::endl;
+        std::clog << "Could not establish data link with sensor at " << deviceConfiguration.deviceAddress << std::endl;
         return EXIT_FAILURE;
     }
 

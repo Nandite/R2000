@@ -69,7 +69,7 @@ namespace Device {
             std::vector<std::uint32_t> distances{};
             // Amplitude data in the range 32-4095, values lower than 32 indicate an error or undefined values
             std::vector<std::uint32_t> amplitudes{};
-            // Header received ParameterChaining the distance and amplitude data
+            // Header received with the distance and amplitude data
             std::vector<Data::Header> headers{};
         };
     public:
@@ -115,20 +115,6 @@ namespace Device {
             for (const auto &header : headers)
                 byteSize += header.packetSize;
             return std::min(MAX_RECEPTION_BUFFER_SIZE, std::max(byteSize, DEFAULT_RECEPTION_BUFFER_SIZE));
-        }
-
-        /**
-         *
-         */
-        void inline releaseResources() {
-            if (!ioService.stopped())
-                ioService.stop();
-            if (ioServiceThread.joinable())
-                ioServiceThread.join();
-            boost::system::error_code placeholder;
-            socket->shutdown(boost::asio::ip::tcp::socket::shutdown_receive, placeholder);
-            socket->close(placeholder);
-            mIsConnected.store(false, std::memory_order_release);
         }
 
     private:

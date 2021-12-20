@@ -7,6 +7,7 @@
 #pragma once
 
 #include "Data.hpp"
+#include "R2000.hpp"
 #include <atomic>
 #include <cassert>
 #include <climits>
@@ -20,7 +21,6 @@
 
 #define assertm(exp, msg) assert(((void)(msg), exp))
 namespace Device {
-    class R2000;
 
     struct DeviceHandle;
     namespace internals {
@@ -70,9 +70,9 @@ namespace Device {
                                                    Callback callback) {
             constexpr auto byteSizeOf32Bits{sizeof(uint32_t)};
             static_assert(byteSizeOf32Bits == 4, "The size of uint32_t must be 4 bytes");
-            const auto numberOfBytes{std::distance(begin, end)};
+            const auto numberOfBytes{(long unsigned int)std::distance(begin, end)};
             auto position = begin;
-            for (auto remainingBytes{numberOfBytes}, blockCount{0u};
+            for (auto remainingBytes{numberOfBytes}, blockCount{(long unsigned int)0u};
                  remainingBytes >= byteSizeOf32Bits && blockCount < numberOf32bitsBlock;
                  remainingBytes = std::distance(position, end), ++blockCount) {
                 const auto uint32Value{*((uint32_t *) &(*position))};
@@ -89,9 +89,9 @@ namespace Device {
             constexpr auto byteSizeOf16Bits{sizeof(uint16_t)};
             static_assert(byteSizeOf32Bits == 4, "The size of uint32_t must be 4 bytes");
             static_assert(byteSizeOf16Bits == 2, "The size of uint16_t must be 2 bytes");
-            const auto numberOfBytes{std::distance(begin, end)};
+            const auto numberOfBytes{(long unsigned int)std::distance(begin, end)};
             auto position{begin};
-            for (auto remainingBytes{numberOfBytes}, blockCount{0u};
+            for (auto remainingBytes{numberOfBytes}, blockCount{(long unsigned int)0u};
                  remainingBytes >= byteSizeOf32Bits && blockCount < numberOf48bitsBlock;
                  remainingBytes = std::distance(position, end), ++blockCount) {
                 const auto uint32Value{*((uint32_t *) &(*position))};
@@ -113,7 +113,7 @@ namespace Device {
         };
 
         template<>
-        struct PayloadExtractionFromByteSequence<Data::underlyingType(Data::PACKET_TYPE::A)> {
+        struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::A)> {
             template<typename Iterator>
             static Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
                                             std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
@@ -129,7 +129,7 @@ namespace Device {
         };
 
         template<>
-        struct PayloadExtractionFromByteSequence<Data::underlyingType(Data::PACKET_TYPE::B)> {
+        struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::B)> {
             template<typename Iterator>
             static Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
                                             std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
@@ -146,7 +146,7 @@ namespace Device {
         };
 
         template<>
-        struct PayloadExtractionFromByteSequence<Data::underlyingType(Data::PACKET_TYPE::C)> {
+        struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::C)> {
             template<typename Iterator>
             static Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
                                             std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
@@ -198,9 +198,9 @@ namespace Device {
         template<typename Iterator>
         static std::tuple<bool, Iterator, unsigned int>
         extractScanPacketFromByteRange(Iterator begin, Iterator end, ScanFactory &scanFactory) {
-            static constexpr auto A{Data::underlyingType(Data::PACKET_TYPE::A)};
-            static constexpr auto B{Data::underlyingType(Data::PACKET_TYPE::B)};
-            static constexpr auto C{Data::underlyingType(Data::PACKET_TYPE::C)};
+            static constexpr auto A{Data::underlyingType(Device::PACKET_TYPE::A)};
+            static constexpr auto B{Data::underlyingType(Device::PACKET_TYPE::B)};
+            static constexpr auto C{Data::underlyingType(Device::PACKET_TYPE::C)};
 
             auto result{internals::retrievePacketHeader(begin, end)};
             if (!result)
@@ -228,18 +228,21 @@ namespace Device {
             distances.reserve(numPointReserve);
             amplitudes.reserve(numPointReserve);
             switch (packetType) {
-                case A:
+                case A: {
                     payloadEndPosition = internals::PayloadExtractionFromByteSequence<A>::retrievePayload(
                             payloadStart, end, numberOfPoints, distances, amplitudes);
                     break;
-                case B:
+                }
+                case B: {
                     payloadEndPosition = internals::PayloadExtractionFromByteSequence<B>::retrievePayload(
                             payloadStart, end, numberOfPoints, distances, amplitudes);
                     break;
-                case C:
+                }
+                case C: {
                     payloadEndPosition = internals::PayloadExtractionFromByteSequence<C>::retrievePayload(
                             payloadStart, end, numberOfPoints, distances, amplitudes);
                     break;
+                }
                 default:
                     throw std::runtime_error("TCPLink::Unsupported payload type: " + packetType);
             }
@@ -255,12 +258,12 @@ namespace Device {
         virtual ~DataLink();
 
     private:
-        std::shared_ptr<R2000> mDevice{nullptr};
         std::future<void> mWatchdogTask{};
         Cv mCv{};
         LockType mInterruptCvLock{};
         std::atomic_bool mInterruptFlag{false};
     protected:
+        std::shared_ptr<R2000> mDevice{nullptr};
         std::shared_ptr<DeviceHandle> mHandle{nullptr};
         std::atomic_bool mIsConnected{false};
     };

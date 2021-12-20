@@ -11,7 +11,7 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> controller, std::shared_ptr<De
         : mDevice(std::move(controller)), mHandle(std::move(handle)) {
     if (!Device::Commands::StartScanCommand{*mDevice}.execute(*mHandle)) {
         mIsConnected.store(false, std::memory_order_release);
-        std::clog << __func__ << "Could not request the device to start the stream" << std::endl;
+        std::clog << __func__ << "Could not request the device to start the stream." << std::endl;
         return;
     }
     if (mHandle->watchdogEnabled) {
@@ -44,8 +44,12 @@ Device::DataLink::~DataLink() {
         if (mHandle->watchdogEnabled)
             mWatchdogTask.wait();
     }
-    Device::Commands::StopScanCommand{*mDevice}.execute(*mHandle);
-    Device::Commands::ReleaseHandleCommand{*mDevice}.execute(*mHandle);
+    if (!Device::Commands::StopScanCommand{*mDevice}.execute(*mHandle)) {
+        std::clog << __func__ << "Could not stop the data stream." << std::endl;
+    }
+    if (!Device::Commands::ReleaseHandleCommand{*mDevice}.execute(*mHandle)) {
+        std::clog << __func__ << "Could not release the handle." << std::endl;
+    }
 }
 
 bool Device::DataLink::isAlive() const {

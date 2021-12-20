@@ -19,43 +19,22 @@ namespace Device {
         };
 
     public:
-        DeviceHandle(HandleType value, const Data::PACKET_TYPE packetType, const int startAngle,
+        DeviceHandle(HandleType value,
                      const bool watchdogEnabled,
-                     const std::chrono::milliseconds watchdogTimeout, const unsigned short port,
-                     boost::asio::ip::address hostname,
-                     const PROTOCOL aProtocol)
+                     const std::chrono::milliseconds watchdogTimeout,
+                     const unsigned short port)
                 : value(std::move(value)),
-                  packetType(packetType),
-                  startAngle(startAngle),
                   watchdogEnabled(watchdogEnabled),
                   watchdogTimeout(watchdogTimeout),
-                  port(port),
-                  hostname(std::move(hostname)),
-                  protocol(aProtocol) {
+                  port(port) {
         }
 
         virtual ~DeviceHandle() = default;
 
-        [[maybe_unused]] const HandleType value{};
-        [[maybe_unused]] const Data::PACKET_TYPE packetType{};
-        [[maybe_unused]] const int startAngle{};
-        [[maybe_unused]] const bool watchdogEnabled{};
-        [[maybe_unused]] const std::chrono::milliseconds watchdogTimeout{};
-        [[maybe_unused]] const unsigned short port{};
-        [[maybe_unused]] const boost::asio::ip::address hostname{boost::asio::ip::address::from_string("0.0.0.0")};
-        [[maybe_unused]] const PROTOCOL protocol{};
+        const HandleType value{};
+        const bool watchdogEnabled{};
+        const std::chrono::milliseconds watchdogTimeout{};
+        const unsigned short port{};
     };
-
-    inline std::string packetTypeToString(Data::PACKET_TYPE type) {
-        switch (type) {
-            case Data::PACKET_TYPE::A:
-                return "A";
-            case Data::PACKET_TYPE::B:
-                return "B";
-            case Data::PACKET_TYPE::C:
-                return "C";
-        }
-        return "C";
-    }
 
 } // namespace Device

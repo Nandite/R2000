@@ -19,15 +19,10 @@ namespace Device {
     class builder_exception : public std::invalid_argument {
     public:
         explicit builder_exception(const std::string &what) : std::invalid_argument(what) {};
-
         builder_exception(const builder_exception &) = default;
-
         builder_exception &operator=(const builder_exception &) = default;
-
         builder_exception(builder_exception &&) = default;
-
         builder_exception &operator=(builder_exception &&) = default;
-
         ~builder_exception() noexcept override = default;
     };
     namespace internals {
@@ -90,51 +85,27 @@ namespace Device {
             return std::any_cast<T>(any);
         }
 
-        template<typename T>
-        auto cast_any_or_default(std::any &&any, T defaultArg) noexcept(true) {
-            if (!any.has_value())
-                return defaultArg;
-            const auto value = std::any_cast<T>(&any);
-            return value != nullptr ? *value : defaultArg;
+        auto find_value_or_throw(const ParametersMap &map,
+                                 const std::string &key,
+                                 const std::string &throw_message) noexcept(false) {
+            if (!map.count(key))
+                throw builder_exception(std::string(__func__) + " : Key not found -> " + throw_message);
+            return map.at(key);
         }
+
     } // namespace internals
 
     class DataLinkBuilder {
     public:
 
-        DataLinkBuilder &withProtocol(DeviceHandle::PROTOCOL protocol) {
-            requirements.put("protocol", protocol);
-            return *this;
+        explicit DataLinkBuilder(const Device::RWParameters::TcpHandle &builder) {
+            requirements.put("protocol", Device::DeviceHandle::PROTOCOL::TCP);
+            requirements.put("handleBuilder", builder);
         }
 
-        DataLinkBuilder &withTargetHostname(const std::string &hostname) {
-            requirements.put("hostname", hostname);
-            return *this;
-        }
-
-        DataLinkBuilder &withPort(const unsigned short port) {
-            requirements.put("port", port);
-            return *this;
-        }
-
-        DataLinkBuilder &withStartAngle(const int startAngle) {
-            requirements.put("start_angle", startAngle);
-            return *this;
-        }
-
-        DataLinkBuilder &withPacketType(Data::PACKET_TYPE packetType) {
-            requirements.put("packet_type", packetType);
-            return *this;
-        }
-
-        DataLinkBuilder &withWatchdogEnabled() {
-            requirements.put("watchdog_enabled", true);
-            return *this;
-        }
-
-        DataLinkBuilder &withWatchdogTimeoutInMs(const unsigned int watchdogTimeout) {
-            requirements.put("watchdog_timeout", watchdogTimeout);
-            return *this;
+        explicit DataLinkBuilder(const Device::RWParameters::UdpHandle &builder) {
+            requirements.put("protocol", Device::DeviceHandle::PROTOCOL::UDP);
+            requirements.put("handleBuilder", builder);
         }
 
         std::shared_ptr<DataLink> build(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
@@ -151,37 +122,24 @@ namespace Device {
     private:
         std::shared_ptr<DataLink>
         build_and_potentially_throw(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
+
             const auto protocol{internals::cast_any_or_throw<Device::DeviceHandle::PROTOCOL>(
                     requirements.get("protocol"), "Could not get the protocol parameter. You must specify it using the"
-                                                  " method withProtocol(...)")};
-            const auto startAngle{internals::cast_any_or_throw<int>(
-                    requirements.get("start_angle"),
-                    "Could not get the start angle parameter. You must specify it using the"
-                    " method withStartAngle(...)")};
-            const auto packetType{internals::cast_any_or_throw<Device::Data::PACKET_TYPE>(
-                    requirements.get("packet_type"),
-                    "Could not get the packet type parameter. You must specify it using the method withPacketType(...)")};
-
-            const auto watchdogEnabled{
-                    internals::cast_any_or_default<bool>(requirements.get("watchdog_enabled"), false)};
-            const auto watchdogTimeout{
-                    internals::cast_any_or_default<unsigned int>(requirements.get("watchdog_timeout"), 100)};
-
-
-            std::unordered_map<std::string, std::string> handleParameters{};
-            handleParameters["packet_type"] = Device::packetTypeToString(packetType);
-            handleParameters["start_angle"] = std::to_string(startAngle);
-            if (watchdogEnabled) {
-                handleParameters["watchdog"] = "on";
-                handleParameters["watchdogtimeout"] = std::to_string(watchdogTimeout);
-            } else {
-                handleParameters["watchdog"] = "off";
-            }
-            const auto hostname{internals::cast_any_or_throw<std::string>(
-                    requirements.get("hostname"), "Could not get the hostname. "
-                                                  "You must specify it using the method withTargetHostname(...)")};
+                                                  " methods usingUdp(...) or usingTcp(...)")};
             switch (protocol) {
                 case DeviceHandle::PROTOCOL::TCP: {
+                    const auto handleBuilder{internals::cast_any_or_throw<Device::RWParameters::TcpHandle>(
+                            requirements.get("handleBuilder"),
+                            "Could not get the handle builder parameter. You must specify it using the"
+                            " method withHandleBuilder(...)")};
+                    const auto handleParameters{handleBuilder.build()};
+                    const auto watchdogEnabled{internals::find_value_or_throw(handleParameters,
+                                                                              PARAMETER_HANDLE_WATCHDOG,
+                                                                              "") == BOOL_PARAMETER_TRUE};
+                    const auto watchdogTimeout{
+                            watchdogEnabled ? std::stoi(internals::find_value_or_throw(handleParameters,
+                                                                                       PARAMETER_HANDLE_WATCHDOG_TIMEOUT,
+                                                                                       "")) : 60000};
                     const auto result{Device::Commands::RequestTcpHandleCommand{*device}.execute(handleParameters)};
                     if (!result)
                         return {nullptr};
@@ -189,27 +147,34 @@ namespace Device {
                     const auto port{deviceAnswer.first};
                     const auto handle{deviceAnswer.second};
                     const auto deviceHandle{std::make_shared<DeviceHandle>(
-                            handle, packetType, startAngle, watchdogEnabled, std::chrono::milliseconds(watchdogTimeout),
-                            port,
-                            boost::asio::ip::address::from_string(hostname), DeviceHandle::PROTOCOL::TCP)};
+                            handle, watchdogEnabled, std::chrono::milliseconds(watchdogTimeout),
+                            port)};
                     return std::make_shared<TCPLink>(device, deviceHandle);
                 }
                 case DeviceHandle::PROTOCOL::UDP: {
-                    const auto port{internals::cast_any_or_throw<unsigned short>(
-                            requirements.get("port"),
-                            "Could not get the UDP port parameter. You must specify it using the"
-                            " method withPort(...)")};
-                    handleParameters["port"] = std::to_string(port);
-                    handleParameters["address"] = hostname;
+                    const auto handleBuilder{internals::cast_any_or_throw<Device::RWParameters::UdpHandle>(
+                            requirements.get("handleBuilder"),
+                            "Could not get the handle builder parameter. You must specify it using the"
+                            " method withHandleBuilder(...)")};
+                    const auto handleParameters{handleBuilder.build()};
+                    const auto watchdogEnabled{internals::find_value_or_throw(handleParameters,
+                                                                              PARAMETER_HANDLE_WATCHDOG,
+                                                                              "") == BOOL_PARAMETER_TRUE};
+                    const auto watchdogTimeout{
+                            watchdogEnabled ? std::stoi(internals::find_value_or_throw(handleParameters,
+                                                                                       PARAMETER_HANDLE_WATCHDOG_TIMEOUT,
+                                                                                       "")) : 60000};
+                    const auto port{std::stoi(internals::find_value_or_throw(handleParameters,
+                                                                             PARAMETER_HANDLE_PORT,
+                                                                             "Could not get the port parameter."))};
                     const auto result{Device::Commands::RequestUdpHandleCommand{*device}.execute(handleParameters)};
                     if (!result)
                         return {nullptr};
                     const auto &deviceAnswer{result.value()};
                     const auto handle{deviceAnswer};
                     const auto deviceHandle{std::make_shared<DeviceHandle>(
-                            handle, packetType, startAngle, watchdogEnabled, std::chrono::milliseconds(watchdogTimeout),
-                            port,
-                            boost::asio::ip::address::from_string(hostname), DeviceHandle::PROTOCOL::UDP)};
+                            handle, watchdogEnabled, std::chrono::milliseconds(watchdogTimeout),
+                            port)};
                     return std::make_shared<UDPLink>(device, deviceHandle);
                 }
             }
