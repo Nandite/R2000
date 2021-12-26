@@ -4,8 +4,8 @@
 //!
 //! @file
 
-#include "DataLink/TCPLink.hpp"
-#include "DeviceHandle.hpp"
+#include "R2000/DataLink/TCPLink.hpp"
+#include "R2000/DeviceHandle.hpp"
 #include <iostream>
 
 Device::TCPLink::TCPLink(std::shared_ptr<R2000> device,
@@ -41,7 +41,7 @@ Device::TCPLink::TCPLink(std::shared_ptr<R2000> device,
             ioService.run();
         });
     } else {
-        std::clog << "Could not join device (" << error.message() << ")" << std::endl;
+        std::clog << "Could not join the device (" << error.message() << ")" << std::endl;
         mIsConnected.store(false, std::memory_order_release);
     }
 }

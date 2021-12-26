@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace LocalizationToolkit::program
+namespace Backtrace
 {
     std::string makeBacktrace(int skip);
 

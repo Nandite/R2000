@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "Data.hpp"
-#include "R2000.hpp"
+#include "R2000/Data.hpp"
+#include "R2000/R2000.hpp"
 #include <atomic>
 #include <cassert>
 #include <climits>
@@ -17,7 +17,7 @@
 #include <mutex>
 #include <optional>
 #include <cmath>
-#include "Farbot.hpp"
+#include "R2000/Farbot.hpp"
 
 #define assertm(exp, msg) assert(((void)(msg), exp))
 namespace Device {

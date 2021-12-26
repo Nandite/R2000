@@ -58,9 +58,9 @@ namespace Device::Data {
         std::uint32_t iqInput{};
         // Bit field for switching output overload warning
         std::uint32_t iqOverload{};
-        // Raw timestamp for status of switching I/Q
+        // Raw timestamp for systemStatusMap of switching I/Q
         std::uint64_t iqTimestampRaw{};
-        // Synchronized timestamp for status of switching I/Q
+        // Synchronized timestamp for systemStatusMap of switching I/Q
         std::uint64_t iqTimestampSync{};
         // 0-3 bytes padding (to align the header size to a 32bit boundary)
         // uint8_t padding[4] = {0, 0, 0, 0};

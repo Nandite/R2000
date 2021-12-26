@@ -4,8 +4,8 @@
 //!
 //! @file
 
-#include "R2000.hpp"
-#include "DeviceHandle.hpp"
+#include "R2000/R2000.hpp"
+#include "R2000/DeviceHandle.hpp"
 #include <bitset>
 #include <iostream>
 #include <utility>

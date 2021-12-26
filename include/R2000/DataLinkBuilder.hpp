@@ -93,6 +93,13 @@ namespace Device {
             return map.at(key);
         }
 
+        std::string find_value_or_default(const ParametersMap &map,
+                                   const std::string &key, const std::string & defaultValue) noexcept(false) {
+            if (!map.count(key))
+                return defaultValue;
+            return map.at(key);
+        }
+
     } // namespace internals
 
     class DataLinkBuilder {
@@ -133,9 +140,9 @@ namespace Device {
                             "Could not get the handle builder parameter. You must specify it using the"
                             " method withHandleBuilder(...)")};
                     const auto handleParameters{handleBuilder.build()};
-                    const auto watchdogEnabled{internals::find_value_or_throw(handleParameters,
+                    const auto watchdogEnabled{internals::find_value_or_default(handleParameters,
                                                                               PARAMETER_HANDLE_WATCHDOG,
-                                                                              "") == BOOL_PARAMETER_TRUE};
+                                                                                BOOL_PARAMETER_FALSE) == BOOL_PARAMETER_TRUE};
                     const auto watchdogTimeout{
                             watchdogEnabled ? std::stoi(internals::find_value_or_throw(handleParameters,
                                                                                        PARAMETER_HANDLE_WATCHDOG_TIMEOUT,
@@ -157,9 +164,9 @@ namespace Device {
                             "Could not get the handle builder parameter. You must specify it using the"
                             " method withHandleBuilder(...)")};
                     const auto handleParameters{handleBuilder.build()};
-                    const auto watchdogEnabled{internals::find_value_or_throw(handleParameters,
-                                                                              PARAMETER_HANDLE_WATCHDOG,
-                                                                              "") == BOOL_PARAMETER_TRUE};
+                    const auto watchdogEnabled{internals::find_value_or_default(handleParameters,
+                                                                                PARAMETER_HANDLE_WATCHDOG,
+                                                                                BOOL_PARAMETER_FALSE) == BOOL_PARAMETER_TRUE};
                     const auto watchdogTimeout{
                             watchdogEnabled ? std::stoi(internals::find_value_or_throw(handleParameters,
                                                                                        PARAMETER_HANDLE_WATCHDOG_TIMEOUT,

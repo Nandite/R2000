@@ -6,7 +6,7 @@
 #include <cstring>
 #include <iostream>
 
-std::string LocalizationToolkit::program::makeBacktrace(int skip) {
+std::string Backtrace::makeBacktrace(int skip) {
     void *callStack[128];
     const int nMaxFrames = sizeof(callStack) / sizeof(callStack[0]);
     char buf[1024];
@@ -40,7 +40,7 @@ std::string LocalizationToolkit::program::makeBacktrace(int skip) {
     return trace_buf.str();
 }
 
-void LocalizationToolkit::program::printBacktraceAndExitHandler(int signal) {
+void Backtrace::printBacktraceAndExitHandler(int signal) {
     std::cout << "Signal " << signal << " -> " << strsignal(signal) << " caught." << std::endl;
     makeBacktrace(1);
     exit(signal);

@@ -105,14 +105,13 @@ RETURN_TYPE & F_NAME (ARGUMENT_TYPE_1 ARGUMENT_NAME_1, ARGUMENT_TYPE_2 ARGUMENT_
 #define COMMAND_LIST_PARAMETERS "list_parameters"
 #define COMMAND_GET_PARAMETER "get_parameter"
 #define COMMAND_SET_PARAMETER "set_parameter"
-#define COMMAND_RESET_PARAMETERS "reset_parameters"
+#define COMMAND_RESET_PARAMETERS "reset_parameter"
 #define COMMAND_FACTORY_RESET "factory_reset"
 #define COMMAND_REQUEST_TCP_HANDLE "request_handle_tcp"
 #define COMMAND_REQUEST_UDP_HANDLE "request_handle_udp"
 
 #define PARAMETER_NAME_HANDLE "handle"
-#define PARAMETER_NAME_LIST "parametersList"
-
+#define PARAMETER_NAME_LIST "list"
 
 #define ERROR_CODE "error_code"
 #define ERROR_TEXT "error_text"
@@ -195,10 +194,11 @@ namespace Device {
     class DataLink;
 
     struct DeviceConfiguration {
-        explicit DeviceConfiguration(boost::asio::ip::address deviceAddress, unsigned short port = 80)
-                : deviceAddress(std::move(deviceAddress)), httpServicePort(port) {
+        DeviceConfiguration(std::string name, const std::string& deviceAddress, unsigned short port = 80)
+                : name(std::move(name)),deviceAddress(boost::asio::ip::address::from_string(deviceAddress)), httpServicePort(port) {
         }
 
+        std::string name;
         const boost::asio::ip::address deviceAddress{};
         const unsigned short httpServicePort{};
     };
@@ -514,7 +514,7 @@ namespace Device {
         struct ParametersBuilderImpl<RwParametersTags::HandleTcpTag> : public HandleParameters {
 
             ParametersBuilderImpl() {
-                parameters[PARAMETER_HANDLE_WATCHDOG] = "off";
+                withoutWatchdog();
             }
 
             ADD_RW_PARAMETER_BUILDER_METHOD_ON(withWatchdog, ParametersBuilderImpl, PARAMETER_HANDLE_WATCHDOG);
@@ -786,8 +786,20 @@ namespace Device {
         [[nodiscard]] std::pair<bool, Device::PropertyTree>
         sendHttpCommand(const std::string &command, const ParametersMap &parameters) const noexcept(false);
 
+        /**
+         *
+         * @return
+         */
         [[nodiscard]] inline auto getHostname() const {
             return mConfiguration.deviceAddress;
+        }
+
+        /**
+         *
+         * @return
+         */
+        [[nodiscard]] inline auto getName() const {
+            return mConfiguration.name;
         }
 
     private:
@@ -795,7 +807,7 @@ namespace Device {
          * Send a HTTP GET request to the device.
          * @param requestPath The last part of an URL with a slash leading.
          * @param header The response header returned as std::string.
-         * @return The HTTP status code or 0 in case of an error.
+         * @return The HTTP systemStatusMap code or 0 in case of an error.
          */
         [[nodiscard]] std::tuple<int, std::string, std::string> httpGet(const std::string &requestPath) const
         noexcept(false);
@@ -823,7 +835,7 @@ namespace Device {
             struct FetchParameterList;
             struct SetParameters;
             struct FactoryResetParameters;
-            struct FactoryResetAll;
+            struct FactoryResetDevice;
             struct RebootDevice;
             struct RequestUdpHandle;
             struct RequestTcpHandle;
@@ -1044,7 +1056,7 @@ namespace Device {
         };
 
         template<>
-        struct CommandExecutorImpl<internals::Parameters::CommandTags::FactoryResetAll>
+        struct CommandExecutorImpl<internals::Parameters::CommandTags::FactoryResetDevice>
         {
             explicit CommandExecutorImpl(const R2000 & device) : device(device){}
             inline bool execute() {
@@ -1109,7 +1121,7 @@ namespace Device {
                     if (!result.empty()) {
                         const auto statusFlags{result.at(PARAMETER_STATUS_FLAGS)};
                         const auto value{std::stoi(statusFlags)};
-                        std::bitset<STATUS_FLAG_BIT_SIZE> bitsetRepresentation(value);
+                        std::bitset<32> bitsetRepresentation(value);
                         return {bitsetRepresentation[0]};
                     }
                 }
@@ -1182,8 +1194,8 @@ namespace Device {
                 internals::Parameters::CommandTags::SetParameters>;
         using FactoryResetParametersCommand = internals::Parameters::CommandExecutorImpl<
                 internals::Parameters::CommandTags::FactoryResetParameters>;
-        using FactoryResetAllCommand = internals::Parameters::CommandExecutorImpl<
-                internals::Parameters::CommandTags::FactoryResetAll>;
+        using FactoryResetDeviceCommand = internals::Parameters::CommandExecutorImpl<
+                internals::Parameters::CommandTags::FactoryResetDevice>;
         using RebootDeviceCommand = internals::Parameters::CommandExecutorImpl<
                 internals::Parameters::CommandTags::RebootDevice>;
         using RequestUdpHandleCommand = internals::Parameters::CommandExecutorImpl<
@@ -1191,4 +1203,5 @@ namespace Device {
         using RequestTcpHandleCommand = internals::Parameters::CommandExecutorImpl<
                 internals::Parameters::CommandTags::RequestTcpHandle>;
     };
+
 } // namespace Device

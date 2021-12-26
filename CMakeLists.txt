@@ -35,20 +35,20 @@ pkg_check_modules(JSONCPP jsoncpp)
 link_libraries(${JSONCPP_LIBRARIES})
 ############################################################################
 
-add_executable(DataLinkFunctionsTest include
-        src/DataLink/DataLink.cpp
-        src/DataLink/TCPLink.cpp
-        src/DataLink/UDPLink.cpp
-        src/R2000.cpp
-        StreamManipulationTest.cpp include/ScanConverter.hpp)
-target_link_libraries(DataLinkFunctionsTest ${CMAKE_DL_LIBS}
+add_executable(CommandsTest include
+        src/Backtrace.cpp
+        src/R2000/R2000.cpp
+        CommandsTest.cpp
+        include/R2000/StatusWatcher.hpp)
+target_link_libraries(CommandsTest ${CMAKE_DL_LIBS}
         ${Boost_LIBRARIES} ${JSONCPP_LIBRARIES})
 
 add_executable(DataLinkTest include
-        src/DataLink/DataLink.cpp
-        src/DataLink/TCPLink.cpp
-        src/DataLink/UDPLink.cpp
-        src/R2000.cpp
+        src/R2000/DataLink/DataLink.cpp
+        src/R2000/DataLink/TCPLink.cpp
+        src/R2000/DataLink/UDPLink.cpp
+        src/R2000/R2000.cpp
+        src/R2000/StatusWatcher.cpp
         src/Backtrace.cpp
         DataLinkTest.cpp)
 target_link_libraries(DataLinkTest ${CMAKE_DL_LIBS}

@@ -3,9 +3,9 @@
 //! Any reproduction or use outside B2A Technology is prohibited.
 //!
 //! @file
-#include "DataLink/DataLink.hpp"
-#include "DeviceHandle.hpp"
-#include "R2000.hpp"
+#include "R2000/DataLink/DataLink.hpp"
+#include "R2000/DeviceHandle.hpp"
+#include "R2000/R2000.hpp"
 
 Device::DataLink::DataLink(std::shared_ptr<R2000> controller, std::shared_ptr<DeviceHandle> handle)
         : mDevice(std::move(controller)), mHandle(std::move(handle)) {

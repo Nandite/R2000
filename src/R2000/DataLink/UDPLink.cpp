@@ -6,8 +6,8 @@
 
 #include <utility>
 #include <iostream>
-#include "DeviceHandle.hpp"
-#include "DataLink/UDPLink.hpp"
+#include "R2000/DeviceHandle.hpp"
+#include "R2000/DataLink/UDPLink.hpp"
 
 Device::UDPLink::UDPLink(std::shared_ptr<R2000> device, std::shared_ptr<DeviceHandle> handle)
         : DataLink(std::move(device), std::move(handle)),
