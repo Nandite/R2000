@@ -12,18 +12,123 @@
 #include <vector>
 
 namespace Device::Data {
-/**
- * Get the underlying value of an enum.
- * @tparam E The enum type.
- * @param enumerator The instance of enum to get the underlying value.
- * @return The value of the enum given its type.
- */
+    /**
+     * Get the underlying value of an enum.
+     * @tparam E The enum type.
+     * @param enumerator The instance of enum to get the underlying value.
+     * @return The value of the enum given its type.
+     */
     template<typename E>
     constexpr auto underlyingType(E enumerator) {
         return static_cast<std::underlying_type_t<E>>(enumerator);
     }
 
+    namespace internals
+    {
+//        template<typename T, bool Advance, typename Iterator>
+//        inline static void interpretLittleEndianByteRangeAsT(Iterator &, T &){}
+//
+        template<typename T, bool Advance>
+        struct InterpretLittleEndianByteRange
+        {
+            template<typename Iterator>
+            static inline void interpret(Iterator &, T &){};
+        };
+
+        template<bool Advance>
+        struct InterpretLittleEndianByteRange<std::uint16_t, Advance>
+        {
+            template<typename Iterator>
+            static inline void interpret(Iterator &position, std::uint16_t & v){
+                v = uint16_t(*position) | (uint16_t(*(position + 1)) << 8);
+                if constexpr(Advance) {
+                    constexpr auto byteSizeOf16Bits{sizeof(std::uint16_t)};
+                    std::advance(position, byteSizeOf16Bits);
+                }
+            };
+        };
+
+        template<bool Advance>
+        struct InterpretLittleEndianByteRange<std::uint32_t, Advance>
+        {
+            template<typename Iterator>
+            static inline void interpret(Iterator &position, std::uint32_t &v) {
+                v = uint32_t(*position) |
+                    (uint32_t(*(position + 1)) << 8) |
+                    (uint32_t(*(position + 2)) << 16) |
+                    (uint32_t(*(position + 3)) << 24);
+                if constexpr(Advance) {
+                    constexpr auto byteSizeOf32Bits{sizeof(std::uint32_t)};
+                    std::advance(position, byteSizeOf32Bits);
+                }
+            };
+        };
+
+        template<bool Advance>
+        struct InterpretLittleEndianByteRange<std::int32_t, Advance>
+        {
+            template<typename Iterator>
+            static inline void interpret(Iterator &position, std::int32_t &v) {
+                v = int32_t(*position) |
+                    (int32_t(*(position + 1)) << 8) |
+                    (int32_t(*(position + 2)) << 16) |
+                    (int32_t(*(position + 3)) << 24);
+                if constexpr(Advance) {
+                    constexpr auto byteSizeOf32Bits{sizeof(std::int32_t)};
+                    std::advance(position, byteSizeOf32Bits);
+                }
+            };
+        };
+
+        template<bool Advance>
+        struct InterpretLittleEndianByteRange<std::uint64_t, Advance>
+        {
+            template<typename Iterator>
+            static inline void interpret(Iterator &position, std::uint64_t & v){
+                v = uint64_t(*position) |
+                    (uint64_t(*(position + 1)) << 8) |
+                    (uint64_t(*(position + 2)) << 16) |
+                    (uint64_t(*(position + 3)) << 24) |
+                    (uint64_t(*(position + 4)) << 32) |
+                    (uint64_t(*(position + 5)) << 40) |
+                    (uint64_t(*(position + 6)) << 48) |
+                    (uint64_t(*(position + 7)) << 56);
+                if constexpr(Advance) {
+                    constexpr auto byteSizeOf64Bits{sizeof(std::uint64_t)};
+                    std::advance(position, byteSizeOf64Bits);
+                }
+            };
+        };
+    }
+
     struct Header {
+
+        template<typename Iterator>
+        static Header fromByteRange(Iterator position)
+        {
+            Data::Header header{};
+            internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(position, header.magic);
+            internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(position, header.packetType);
+            internals::InterpretLittleEndianByteRange<uint32_t, true>::interpret(position, header.packetSize);
+            internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(position, header.headerSize);
+            internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(position, header.scanNumber);
+            internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(position, header.packetNumber);
+            internals::InterpretLittleEndianByteRange<uint64_t, true>::interpret(position, header.timestampRaw);
+            internals::InterpretLittleEndianByteRange<uint64_t, true>::interpret(position, header.timestampSync);
+            internals::InterpretLittleEndianByteRange<uint32_t, true>::interpret(position, header.statusFlags);
+            internals::InterpretLittleEndianByteRange<uint32_t, true>::interpret(position, header.scanFrequency);
+            internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(position, header.numPointsScan);
+            internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(position, header.numPointsPacket);
+            internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(position, header.firstIndex);
+            internals::InterpretLittleEndianByteRange<int32_t, true>::interpret(position, header.firstAngle);
+            internals::InterpretLittleEndianByteRange<int32_t, true>::interpret(position, header.angularIncrement);
+            internals::InterpretLittleEndianByteRange<uint32_t, true>::interpret(position, header.iqInput);
+            internals::InterpretLittleEndianByteRange<uint32_t, true>::interpret(position, header.iqOverload);
+            internals::InterpretLittleEndianByteRange<uint64_t, true>::interpret(position, header.iqTimestampRaw);
+            internals::InterpretLittleEndianByteRange<uint64_t, false>::interpret(position, header.iqTimestampSync);
+            return header;
+        }
+
         // Magic bytes, must be  5C A2 (hex)
         std::uint16_t magic{};
         // Packet type, must be 43 00 (hex)
@@ -64,7 +169,7 @@ namespace Device::Data {
         std::uint64_t iqTimestampSync{};
         // 0-3 bytes padding (to align the header size to a 32bit boundary)
         // uint8_t padding[4] = {0, 0, 0, 0};
-    } __attribute__((packed));
+    };
 
     class Scan {
     public:

@@ -85,7 +85,7 @@ RETURN_TYPE & F_NAME (ARGUMENT_TYPE_1 ARGUMENT_NAME_1, ARGUMENT_TYPE_2 ARGUMENT_
 
 #define ADD_RW_PARAMETER_BUILDER_METHOD_OFF(F_NAME, RETURN_TYPE, \
                         PARAMETER_NAME) \
-[[nodiscard]]RETURN_TYPE& F_NAME () \
+[[nodiscard]] RETURN_TYPE & F_NAME () \
 {                                                                     \
    parameters[PARAMETER_NAME] = BOOL_PARAMETER_FALSE; \
    return *this; \
@@ -189,8 +189,6 @@ using namespace std::chrono_literals;
 
 namespace Device {
     class R2000;
-    constexpr unsigned int STATUS_FLAG_BIT_SIZE = sizeof(int) * CHAR_BIT;
-
     class DataLink;
 
     struct DeviceConfiguration {
@@ -514,7 +512,7 @@ namespace Device {
         struct ParametersBuilderImpl<RwParametersTags::HandleTcpTag> : public HandleParameters {
 
             ParametersBuilderImpl() {
-                withoutWatchdog();
+                (void)withoutWatchdog();
             }
 
             ADD_RW_PARAMETER_BUILDER_METHOD_ON(withWatchdog, ParametersBuilderImpl, PARAMETER_HANDLE_WATCHDOG);

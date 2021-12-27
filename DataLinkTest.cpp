@@ -7,7 +7,7 @@
 #include <thread>
 #include <pcl/visualization/pcl_visualizer.h>
 #include "Backtrace.hpp"
-#include "ScanConverter.hpp"
+#include "ScanToPointCloud.hpp"
 #include <pcl/common/transforms.h>
 
 using namespace std::chrono_literals;

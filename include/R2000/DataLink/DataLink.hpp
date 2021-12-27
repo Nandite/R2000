@@ -18,8 +18,6 @@
 #include <optional>
 #include <cmath>
 #include "R2000/Farbot.hpp"
-
-#define assertm(exp, msg) assert(((void)(msg), exp))
 namespace Device {
 
     struct DeviceHandle;
@@ -38,12 +36,12 @@ namespace Device {
 
         template<typename Iterator>
         std::optional<std::pair<Iterator, Iterator>> retrievePacketMagic(Iterator begin, Iterator end) {
-            constexpr auto byteSizeOf8Bits{sizeof(uint8_t)};
+            constexpr auto byteSizeOf8Bits{sizeof(std::uint8_t)};
             static_assert(byteSizeOf8Bits == 1, "The size of uint8_t must be exactly 1 byte");
             auto position{begin};
             auto lastByteBeforeEnd{std::prev(end, 1)};
             while (position != lastByteBeforeEnd) {
-                const auto uint16Value{*((uint16_t *) &(*position))};
+                const auto uint16Value{std::uint16_t(*position) | (std::uint16_t(*(position + 1)) << 8)};
                 if (uint16Value == PACKET_START)
                     return {std::make_pair(position, std::next(position, 2))};
                 std::advance(position, byteSizeOf8Bits);
@@ -61,21 +59,24 @@ namespace Device {
             if (!magic)
                 return std::nullopt;
             const auto headerStart{(*magic).first};
-            const auto header{*((Data::Header *) &(*headerStart))};
+            const auto header{Data::Header::fromByteRange(headerStart)};
             return {{headerStart, header}};
         }
 
         template<typename Iterator, typename Callback>
         Iterator retrieve32bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf32bitsBlock,
                                                    Callback callback) {
-            constexpr auto byteSizeOf32Bits{sizeof(uint32_t)};
+            constexpr auto byteSizeOf32Bits{sizeof(std::uint32_t)};
             static_assert(byteSizeOf32Bits == 4, "The size of uint32_t must be 4 bytes");
             const auto numberOfBytes{(long unsigned int)std::distance(begin, end)};
             auto position = begin;
             for (auto remainingBytes{numberOfBytes}, blockCount{(long unsigned int)0u};
                  remainingBytes >= byteSizeOf32Bits && blockCount < numberOf32bitsBlock;
                  remainingBytes = std::distance(position, end), ++blockCount) {
-                const auto uint32Value{*((uint32_t *) &(*position))};
+                const auto uint32Value{std::uint32_t(*position) |
+                                       (std::uint32_t(*(position + 1)) << 8) |
+                                       (std::uint32_t(*(position + 2)) << 16) |
+                                       (std::uint32_t(*(position + 3)) << 24)};
                 std::advance(position, byteSizeOf32Bits);
                 callback(uint32Value);
             }
@@ -85,8 +86,8 @@ namespace Device {
         template<typename Iterator, typename Callback>
         Iterator retrieve48bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf48bitsBlock,
                                                    Callback callback) {
-            constexpr auto byteSizeOf32Bits{sizeof(uint32_t)};
-            constexpr auto byteSizeOf16Bits{sizeof(uint16_t)};
+            constexpr auto byteSizeOf32Bits{sizeof(std::uint32_t)};
+            constexpr auto byteSizeOf16Bits{sizeof(std::uint16_t)};
             static_assert(byteSizeOf32Bits == 4, "The size of uint32_t must be 4 bytes");
             static_assert(byteSizeOf16Bits == 2, "The size of uint16_t must be 2 bytes");
             const auto numberOfBytes{(long unsigned int)std::distance(begin, end)};
@@ -94,9 +95,12 @@ namespace Device {
             for (auto remainingBytes{numberOfBytes}, blockCount{(long unsigned int)0u};
                  remainingBytes >= byteSizeOf32Bits && blockCount < numberOf48bitsBlock;
                  remainingBytes = std::distance(position, end), ++blockCount) {
-                const auto uint32Value{*((uint32_t *) &(*position))};
+                const auto uint32Value{std::uint32_t((*position) << 0) |
+                                       (std::uint32_t(*(position + 1)) << 8) |
+                                       (std::uint32_t(*(position + 2)) << 16) |
+                                       (std::uint32_t(*(position + 3)) << 24)};
                 std::advance(position, byteSizeOf32Bits);
-                const auto uint16Value{*((uint16_t *) &(*position))};
+                const auto uint16Value{std::uint16_t(*position) | (std::uint16_t (*(position + 1)) << 8)};
                 std::advance(position, byteSizeOf16Bits);
                 callback(uint32Value, uint16Value);
             }
