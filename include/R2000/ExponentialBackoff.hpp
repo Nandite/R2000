@@ -35,15 +35,15 @@ const auto ForwardStatus = [](const auto& status) -> bool { return status; };
 template <typename DurationType, typename HowToSleep, typename Predicate, typename Callable, typename... Args,
           // figure out what the callable returns
           typename R = std::decay_t<typename std::result_of<Callable(Args...)>::type>,
-          // require that Predicate is actually a Predicate9
+          // require that Predicate is actually a Predicate
           std::enable_if_t<std::is_convertible<typename std::result_of<Predicate(R)>::type, bool>::value, int> = 0>
 R ExponentialBackoff(const unsigned int maxRetryCount, DurationType initialSleepingTime, DurationType maxSleepingTime,
                      HowToSleep&& sleepAction, Predicate&& isRetryable, Callable&& callable, Args&&... args)
 {
-    auto retryCount = 0u;
+    auto retryCount{0u};
     while (true)
     {
-        const auto status = callable(std::forward<Args>(args)...);
+        const auto status{callable(std::forward<Args>(args)...)};
         if (!isRetryable(status))
             return status;
         if (retryCount >= maxRetryCount)

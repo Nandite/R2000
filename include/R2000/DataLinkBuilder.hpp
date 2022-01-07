@@ -105,16 +105,29 @@ namespace Device {
     class DataLinkBuilder {
     public:
 
-        explicit DataLinkBuilder(const Device::RWParameters::TcpHandle &builder) {
-            requirements.put("protocol", Device::DeviceHandle::PROTOCOL::TCP);
+        /**
+         *
+         * @param builder
+         */
+        explicit DataLinkBuilder(const Device::ReadWriteParameters::TcpHandle &builder) {
+            requirements.put("protocol", Device::PROTOCOL::TCP);
             requirements.put("handleBuilder", builder);
         }
 
-        explicit DataLinkBuilder(const Device::RWParameters::UdpHandle &builder) {
-            requirements.put("protocol", Device::DeviceHandle::PROTOCOL::UDP);
+        /**
+         *
+         * @param builder
+         */
+        explicit DataLinkBuilder(const Device::ReadWriteParameters::UdpHandle &builder) {
+            requirements.put("protocol", Device::PROTOCOL::UDP);
             requirements.put("handleBuilder", builder);
         }
 
+        /**
+         *
+         * @param device
+         * @return
+         */
         std::shared_ptr<DataLink> build(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
             try {
                 return build_and_potentially_throw(device);
@@ -127,15 +140,20 @@ namespace Device {
         }
 
     private:
+        /**
+         *
+         * @param device
+         * @return
+         */
         std::shared_ptr<DataLink>
         build_and_potentially_throw(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
 
-            const auto protocol{internals::cast_any_or_throw<Device::DeviceHandle::PROTOCOL>(
+            const auto protocol{internals::cast_any_or_throw<Device::PROTOCOL>(
                     requirements.get("protocol"), "Could not get the protocol parameter. You must specify it using the"
                                                   " methods usingUdp(...) or usingTcp(...)")};
             switch (protocol) {
-                case DeviceHandle::PROTOCOL::TCP: {
-                    const auto handleBuilder{internals::cast_any_or_throw<Device::RWParameters::TcpHandle>(
+                case PROTOCOL::TCP: {
+                    const auto handleBuilder{internals::cast_any_or_throw<Device::ReadWriteParameters::TcpHandle>(
                             requirements.get("handleBuilder"),
                             "Could not get the handle builder parameter. You must specify it using the"
                             " method withHandleBuilder(...)")};
@@ -158,8 +176,8 @@ namespace Device {
                             port)};
                     return std::make_shared<TCPLink>(device, deviceHandle);
                 }
-                case DeviceHandle::PROTOCOL::UDP: {
-                    const auto handleBuilder{internals::cast_any_or_throw<Device::RWParameters::UdpHandle>(
+                case PROTOCOL::UDP: {
+                    const auto handleBuilder{internals::cast_any_or_throw<Device::ReadWriteParameters::UdpHandle>(
                             requirements.get("handleBuilder"),
                             "Could not get the handle builder parameter. You must specify it using the"
                             " method withHandleBuilder(...)")};

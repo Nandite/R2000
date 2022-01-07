@@ -8,14 +8,14 @@
 #include "R2000/DeviceHandle.hpp"
 #include <iostream>
 
-Device::TCPLink::TCPLink(std::shared_ptr<R2000> device,
-                         std::shared_ptr<DeviceHandle> handle) noexcept(false)
-        : DataLink(std::move(device), std::move(handle)),
+Device::TCPLink::TCPLink(std::shared_ptr<R2000> iDevice,
+                         std::shared_ptr<DeviceHandle> iHandle) noexcept(false)
+        : DataLink(std::move(iDevice), std::move(iHandle)),
           socket(std::make_unique<boost::asio::ip::tcp::socket>(ioService)),
           receptionByteBuffer(DEFAULT_RECEPTION_BUFFER_SIZE, 0),
           extractionByteBuffer(EXTRACTION_BUFFER_SIZE, 0) {
-    const auto hostname{mDevice->getHostname()};
-    const auto port{mHandle->port};
+    const auto hostname{device->getHostname()};
+    const auto port{deviceHandle->port};
     boost::asio::ip::tcp::resolver resolver{ioService};
     boost::asio::ip::tcp::resolver::query query{hostname.to_string(), std::to_string(port)};
     auto endpoints{resolver.resolve(query)};
@@ -31,7 +31,7 @@ Device::TCPLink::TCPLink(std::shared_ptr<R2000> device,
         socket->connect(*endpoints, error);
     }
     if (!error) {
-        mIsConnected.store(true, std::memory_order_release);
+        isConnected.store(true, std::memory_order_release);
         boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
                                 boost::asio::transfer_exactly(DEFAULT_RECEPTION_BUFFER_SIZE),
                                 [this](const boost::system::error_code &error, const unsigned int byteTransferred) {
@@ -42,63 +42,27 @@ Device::TCPLink::TCPLink(std::shared_ptr<R2000> device,
         });
     } else {
         std::clog << "Could not join the device (" << error.message() << ")" << std::endl;
-        mIsConnected.store(false, std::memory_order_release);
+        isConnected.store(false, std::memory_order_release);
     }
 }
 
 void Device::TCPLink::handleBytesReception(const boost::system::error_code &error,
                                            const unsigned int byteTransferred) {
-    if (!error) {
-        const auto streamBegin{std::begin(receptionByteBuffer)};
-        const auto streamEnd{std::next(streamBegin, byteTransferred)};
-        extractionByteBuffer.insert(std::end(extractionByteBuffer), streamBegin, streamEnd);
-        const auto extractionBegin{std::begin(extractionByteBuffer)};
-        const auto extractionEnd{std::end(extractionByteBuffer)};
-        auto position{extractionBegin};
-        auto numberOfMissingBytes{0u};
-        for (;;) {
-            const auto extractionResult{extractScanPacketFromByteRange(position, extractionEnd, scanFactory)};
-            const auto hadEnoughBytes{std::get<0>(extractionResult)};
-            position = std::get<1>(extractionResult);
-            numberOfMissingBytes = std::get<2>(extractionResult);
-            if (scanFactory.isComplete()) {
-                const auto bufferSizeNeededToContainAFullScan{computeBoundedRequiredBufferSize(scanFactory)};
-                resizeReceptionBuffer(bufferSizeNeededToContainAFullScan);
-                {
-                    RealtimeScan::ScopedAccess <farbot::ThreadType::realtime> scanGuard(*realtimeScan);
-                    *scanGuard = *scanFactory;
-                }
-            }
-            if (!hadEnoughBytes)
-                break;
-        }
-        const auto remainingBytes{std::distance(position, extractionEnd)};
-        if (remainingBytes) {
-            extractionByteBuffer.erase(extractionBegin, position);
-        } else {
-            extractionByteBuffer.clear();
-        }
-        const auto bufferCapacity{(unsigned int) receptionByteBuffer.capacity()};
-        const auto numberOfBytesToTransfer{
-                numberOfMissingBytes ? std::min(numberOfMissingBytes, bufferCapacity)
-                                     : bufferCapacity};
-        boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
-                                boost::asio::transfer_exactly(numberOfBytesToTransfer),
-                                [this](const boost::system::error_code &error,
-                                       const unsigned int byteTransferred) {
-                                    handleBytesReception(error, byteTransferred);
-                                });
-    } else if (error == boost::asio::error::eof) {
-
-        boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
-                                boost::asio::transfer_exactly(DEFAULT_RECEPTION_BUFFER_SIZE),
-                                [this](const boost::system::error_code &error, const unsigned int byteTransferred) {
-                                    handleBytesReception(error, byteTransferred);
-                                });
-    } else {
+    if (error) {
         std::clog << __func__ << ":: Network error (" << error.message() << ")" << std::endl;
-        mIsConnected.store(false, std::memory_order_release);
+        isConnected.store(false, std::memory_order_release);
+        return;
     }
+    const auto begin{std::cbegin(receptionByteBuffer)};
+    const auto end{std::next(begin, byteTransferred)};
+    const auto range {insertByteRangeIntoExtractionBuffer(begin, end)};
+    const auto extractionResult{tryExtractingScanFromByteRange(range.first, range.second)};
+    removeUsedByteRange(range.first, extractionResult.first, range.second);
+    boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
+                            boost::asio::transfer_exactly(extractionResult.second),
+                            [this](const auto &error, const auto byteTransferred) {
+                                handleBytesReception(error, byteTransferred);
+                            });
 }
 
 Device::TCPLink::~TCPLink() {
@@ -109,5 +73,5 @@ Device::TCPLink::~TCPLink() {
     boost::system::error_code placeholder;
     socket->shutdown(boost::asio::ip::tcp::socket::shutdown_receive, placeholder);
     socket->close(placeholder);
-    mIsConnected.store(false, std::memory_order_release);
+    isConnected.store(false, std::memory_order_release);
 }

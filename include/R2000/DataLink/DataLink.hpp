@@ -18,24 +18,18 @@
 #include <optional>
 #include <cmath>
 #include "R2000/Farbot.hpp"
+
 namespace Device {
 
     struct DeviceHandle;
     namespace internals {
-
-        template<typename F, typename... Ts>
-        inline static std::future<typename std::result_of<F(Ts...)>::type> spawnAsync(F &&f, Ts &&... params) {
-            return std::async(std::launch::async, std::forward<F>(f), std::forward<Ts>(params)...);
-        }
-
         namespace Types {
             using Byte = unsigned char;
             using Buffer = std::vector<Byte>;
         } // namespace Types
-        constexpr std::uint16_t PACKET_START = 0xa25c;
-
+        const static std::uint16_t PACKET_START = 0xa25c;
         template<typename Iterator>
-        std::optional<std::pair<Iterator, Iterator>> retrievePacketMagic(Iterator begin, Iterator end) {
+        static std::optional<std::pair<Iterator, Iterator>> retrievePacketMagic(Iterator begin, Iterator end) {
             constexpr auto byteSizeOf8Bits{sizeof(std::uint8_t)};
             static_assert(byteSizeOf8Bits == 1, "The size of uint8_t must be exactly 1 byte");
             auto position{begin};
@@ -50,7 +44,7 @@ namespace Device {
         }
 
         template<typename Iterator>
-        std::optional<std::pair<Iterator, Data::Header>> retrievePacketHeader(Iterator begin, Iterator end) {
+        static std::optional<std::pair<Iterator, Data::Header>> retrievePacketHeader(Iterator begin, Iterator end) {
             constexpr auto headerSize{sizeof(Data::Header)};
             const auto numberOfBytes{(unsigned int) std::distance(begin, end)};
             if (numberOfBytes < headerSize)
@@ -64,19 +58,19 @@ namespace Device {
         }
 
         template<typename Iterator, typename Callback>
-        Iterator retrieve32bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf32bitsBlock,
-                                                   Callback callback) {
+        static Iterator retrieve32bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf32bitsBlock,
+                                                          Callback callback) {
             constexpr auto byteSizeOf32Bits{sizeof(std::uint32_t)};
             static_assert(byteSizeOf32Bits == 4, "The size of uint32_t must be 4 bytes");
-            const auto numberOfBytes{(long unsigned int)std::distance(begin, end)};
-            auto position = begin;
-            for (auto remainingBytes{numberOfBytes}, blockCount{(long unsigned int)0u};
+            const auto numberOfBytes{(long unsigned int) std::distance(begin, end)};
+            auto position{begin};
+            for (auto remainingBytes{numberOfBytes}, blockCount{(long unsigned int) 0u};
                  remainingBytes >= byteSizeOf32Bits && blockCount < numberOf32bitsBlock;
                  remainingBytes = std::distance(position, end), ++blockCount) {
-                const auto uint32Value{std::uint32_t(*position) |
-                                       (std::uint32_t(*(position + 1)) << 8) |
-                                       (std::uint32_t(*(position + 2)) << 16) |
-                                       (std::uint32_t(*(position + 3)) << 24)};
+                const auto uint32Value{std::uint32_t(std::uint32_t(*position) |
+                                                     (std::uint32_t(*(position + 1)) << 8) |
+                                                     (std::uint32_t(*(position + 2)) << 16) |
+                                                     (std::uint32_t(*(position + 3)) << 24))};
                 std::advance(position, byteSizeOf32Bits);
                 callback(uint32Value);
             }
@@ -84,34 +78,33 @@ namespace Device {
         }
 
         template<typename Iterator, typename Callback>
-        Iterator retrieve48bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf48bitsBlock,
-                                                   Callback callback) {
+        static Iterator retrieve48bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf48bitsBlock,
+                                                          Callback callback) {
             constexpr auto byteSizeOf32Bits{sizeof(std::uint32_t)};
             constexpr auto byteSizeOf16Bits{sizeof(std::uint16_t)};
             static_assert(byteSizeOf32Bits == 4, "The size of uint32_t must be 4 bytes");
             static_assert(byteSizeOf16Bits == 2, "The size of uint16_t must be 2 bytes");
-            const auto numberOfBytes{(long unsigned int)std::distance(begin, end)};
+            const auto numberOfBytes{(long unsigned int) std::distance(begin, end)};
             auto position{begin};
-            for (auto remainingBytes{numberOfBytes}, blockCount{(long unsigned int)0u};
+            for (auto remainingBytes{numberOfBytes}, blockCount{(long unsigned int) 0u};
                  remainingBytes >= byteSizeOf32Bits && blockCount < numberOf48bitsBlock;
                  remainingBytes = std::distance(position, end), ++blockCount) {
-                const auto uint32Value{std::uint32_t((*position) << 0) |
-                                       (std::uint32_t(*(position + 1)) << 8) |
-                                       (std::uint32_t(*(position + 2)) << 16) |
-                                       (std::uint32_t(*(position + 3)) << 24)};
+                const auto uint32Value{std::uint32_t(std::uint32_t((*position)) |
+                                                     (std::uint32_t(*(position + 1)) << 8) |
+                                                     (std::uint32_t(*(position + 2)) << 16) |
+                                                     (std::uint32_t(*(position + 3)) << 24))};
                 std::advance(position, byteSizeOf32Bits);
-                const auto uint16Value{std::uint16_t(*position) | (std::uint16_t (*(position + 1)) << 8)};
+                const auto uint16Value{std::uint16_t(*position) | (std::uint16_t(*(position + 1)) << 8)};
                 std::advance(position, byteSizeOf16Bits);
                 callback(uint32Value, uint16Value);
             }
             return position;
         }
-
         template<unsigned Type>
         struct PayloadExtractionFromByteSequence {
             template<typename Iterator>
-            static Iterator retrievePayload(Iterator, Iterator, const unsigned int, std::vector<uint32_t> &,
-                                            std::vector<uint32_t> &) {
+            static inline Iterator retrievePayload(Iterator, Iterator, const unsigned int, std::vector<uint32_t> &,
+                                                   std::vector<uint32_t> &) {
                 throw std::runtime_error("Unsupported type of packet payload: " + Type);
             }
         };
@@ -119,8 +112,8 @@ namespace Device {
         template<>
         struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::A)> {
             template<typename Iterator>
-            static Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
-                                            std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
+            static inline Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
+                                                   std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
                 return retrieve32bitsFromAlignedSequence(begin, end, numberOfPoints,
                                                          [&distances, &amplitudes](const uint32_t &distance) {
                                                              const auto nanOrDistance =
@@ -135,8 +128,8 @@ namespace Device {
         template<>
         struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::B)> {
             template<typename Iterator>
-            static Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
-                                            std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
+            static inline Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
+                                                   std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
                 return retrieve48bitsFromAlignedSequence(begin, end, numberOfPoints,
                                                          [&distances, &amplitudes](const uint32_t &distance,
                                                                                    const uint16_t &amplitude) {
@@ -152,8 +145,8 @@ namespace Device {
         template<>
         struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::C)> {
             template<typename Iterator>
-            static Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
-                                            std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
+            static inline Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
+                                                   std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
                 return retrieve32bitsFromAlignedSequence(begin, end, numberOfPoints,
                                                          [&distances, &amplitudes](const uint32_t &point) {
                                                              const auto distance{point & 0x000FFFFF};
@@ -166,32 +159,36 @@ namespace Device {
                                                          });
             }
         };
-
     } // namespace internals
     class DataLink {
     protected:
         class ScanFactory {
         public:
             inline virtual void addPacket(const Data::Header &header, std::vector<std::uint32_t> &inputDistances,
-                                  std::vector<std::uint32_t> &inputAmplitudes) = 0;
-            [[nodiscard]] virtual inline bool empty() const =0;
-            [[nodiscard]] virtual inline bool isComplete() const =0;
-            virtual inline Data::Scan operator*() =0;
+                                          std::vector<std::uint32_t> &inputAmplitudes) = 0;
+            [[nodiscard]] virtual inline bool empty() const = 0;
+            [[nodiscard]] virtual inline bool isComplete() const = 0;
+            virtual inline Data::Scan operator*() = 0;
             virtual inline void clear() = 0;
-            [[nodiscard]] virtual inline bool isDifferentScan(const Data::Header & header) const = 0;
-            [[nodiscard]] virtual  inline bool isNewScan(const Data::Header & header) =0;
+            [[nodiscard]] virtual inline bool isDifferentScan(const Data::Header &header) const = 0;
+            [[nodiscard]] virtual inline bool isNewScan(const Data::Header &header) = 0;
             virtual inline bool operator==(unsigned int scanNumber) const = 0;
             virtual inline bool operator!=(unsigned int scanNumber) const = 0;
-            virtual inline void getHeaders(std::vector<Data::Header> & outputHeaders) const  = 0;
+            virtual inline void getHeaders(std::vector<Data::Header> &outputHeaders) const = 0;
         };
+        template<typename F, typename... Ts>
+        inline static std::future<typename std::result_of<F(Ts...)>::type> spawnAsync(F &&f, Ts &&... params) {
+            return std::async(std::launch::async, std::forward<F>(f), std::forward<Ts>(params)...);
+        }
     protected:
         using LockType = std::mutex;
         using Cv = std::condition_variable;
         using RealtimeScan = farbot::RealtimeObject<Data::Scan, farbot::RealtimeObjectOptions::realtimeMutatable>;
         static constexpr unsigned int MAX_RESERVE_POINTS_BUFFER{1024u};
     protected:
-        DataLink(std::shared_ptr<R2000> controller, std::shared_ptr<DeviceHandle> handle);
-/**
+        DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle);
+
+        /**
          *
          * @tparam Iterator
          * @param begin
@@ -256,19 +253,53 @@ namespace Device {
             }
             return {true, payloadEndPosition, 0};
         }
+
     public:
         [[nodiscard]] virtual bool isAlive() const;
-        [[nodiscard]] virtual Device::Data::Scan getLastScan() const = 0;
+
+        [[nodiscard]] virtual inline Device::Data::Scan getLastScan() const {
+            RealtimeScan::ScopedAccess <farbot::ThreadType::nonRealtime> scanGuard(*realtimeScan);
+            return *scanGuard;
+        };
+
+        [[nodiscard]] virtual inline Device::Data::Scan waitForNextScan() {
+            std::unique_lock<LockType> guard(waitForScanLock);
+            const auto scanCountBeforeWaiting{scanCounter};
+            scanAvailableCv.wait(guard, [this, &scanCountBeforeWaiting]() {
+                const auto scanCountWhileWaiting{scanCounter};
+                return interruptFlag.load(std::memory_order_acquire) ||
+                       (scanCountBeforeWaiting != scanCountWhileWaiting);
+            });
+            return getLastScan();
+        }
+
         virtual ~DataLink();
 
-    private:
-        std::future<void> mWatchdogTask{};
-        Cv mCv{};
-        LockType mInterruptCvLock{};
-        std::atomic_bool mInterruptFlag{false};
     protected:
-        std::shared_ptr<R2000> mDevice{nullptr};
-        std::shared_ptr<DeviceHandle> mHandle{nullptr};
-        std::atomic_bool mIsConnected{false};
+        inline void setOutputScanFromCompletedFactory(DataLink::ScanFactory &scanFactory) {
+            {
+                RealtimeScan::ScopedAccess <farbot::ThreadType::realtime> scanGuard(*realtimeScan);
+                *scanGuard = *scanFactory;
+            }
+            {
+                std::unique_lock<LockType> guard(waitForScanLock);
+                scanCounter++;
+                scanAvailableCv.notify_all();
+            }
+        }
+
+    private:
+        std::future<void> watchdogTask{};
+        Cv interruptCv{};
+        LockType interruptCvLock{};
+        std::atomic_bool interruptFlag{false};
+        std::uint64_t scanCounter{0u};
+    protected:
+        std::unique_ptr<RealtimeScan> realtimeScan{std::make_unique<RealtimeScan>(Data::Scan())};
+        Cv scanAvailableCv{};
+        LockType waitForScanLock{};
+        std::shared_ptr<R2000> device{nullptr};
+        std::shared_ptr<DeviceHandle> deviceHandle{nullptr};
+        std::atomic_bool isConnected{false};
     };
 } // namespace Device

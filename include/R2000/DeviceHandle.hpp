@@ -11,14 +11,19 @@
 
 namespace Device {
     using HandleType = std::string;
+    enum class PROTOCOL {
+        TCP,
+        UDP
+    };
     struct DeviceHandle {
     public:
-        enum class PROTOCOL {
-            TCP,
-            UDP
-        };
-
-    public:
+        /**
+         *
+         * @param value
+         * @param watchdogEnabled
+         * @param watchdogTimeout
+         * @param port
+         */
         DeviceHandle(HandleType value,
                      const bool watchdogEnabled,
                      const std::chrono::milliseconds watchdogTimeout,

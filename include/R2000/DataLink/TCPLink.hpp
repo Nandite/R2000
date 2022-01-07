@@ -14,9 +14,7 @@
 
 namespace Device {
     class R2000;
-
     struct DeviceHandle;
-
     class TCPLink : public DataLink {
         static constexpr unsigned int DEFAULT_RECEPTION_BUFFER_SIZE{4096u};
         static constexpr unsigned int MAX_RECEPTION_BUFFER_SIZE{32768u};
@@ -73,11 +71,7 @@ namespace Device {
             std::vector<Data::Header> headers{};
         };
     public:
-        TCPLink(std::shared_ptr<R2000> device, std::shared_ptr<DeviceHandle> handle) noexcept(false);
-        [[nodiscard]] inline Data::Scan getLastScan() const override {
-            RealtimeScan::ScopedAccess <farbot::ThreadType::nonRealtime> scanGuard(*realtimeScan);
-            return *scanGuard;
-        }
+        TCPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle) noexcept(false);
         ~TCPLink() override;
 
     private:
@@ -88,7 +82,62 @@ namespace Device {
          * @param byteTransferred
          */
         void handleBytesReception(const boost::system::error_code &error, unsigned int byteTransferred);
+        template<typename Iterator>
+        auto insertByteRangeIntoExtractionBuffer(Iterator begin, Iterator end) {
+            extractionByteBuffer.insert(std::cend(extractionByteBuffer), begin, end);
+            return std::make_pair(std::cbegin(extractionByteBuffer),
+                                  std::cend(extractionByteBuffer));
+        }
 
+        /**
+         *
+         * @tparam Iterator
+         * @param begin
+         * @param position
+         * @param end
+         */
+        template<typename Iterator>
+        void removeUsedByteRange(Iterator begin, Iterator position, Iterator end)
+        {
+            const auto remainingBytes{std::distance(position, end)};
+            if (remainingBytes) {
+                extractionByteBuffer.erase(begin, position);
+            } else {
+                extractionByteBuffer.clear();
+            }
+        }
+
+        /**
+         *
+         * @tparam Iterator
+         * @param begin
+         * @param end
+         * @return
+         */
+        template<typename Iterator>
+        auto tryExtractingScanFromByteRange(Iterator begin, Iterator end)
+        {
+            auto position{begin};
+            auto numberOfMissingBytes{0u};
+            for (;;) {
+                const auto extractionResult{extractScanPacketFromByteRange(position, end, scanFactory)};
+                const auto hadEnoughBytes{std::get<0>(extractionResult)};
+                position = std::get<1>(extractionResult);
+                numberOfMissingBytes = std::get<2>(extractionResult);
+                if (scanFactory.isComplete()) {
+                    const auto bufferSizeNeededToContainAFullScan{computeBoundedRequiredBufferSize(scanFactory)};
+                    resizeReceptionBuffer(bufferSizeNeededToContainAFullScan);
+                    setOutputScanFromCompletedFactory(scanFactory);
+                }
+                if (!hadEnoughBytes)
+                    break;
+            }
+            const auto bufferCapacity{(unsigned int) receptionByteBuffer.capacity()};
+            const auto numberOfBytesToTransfer{
+                    numberOfMissingBytes ? std::min(numberOfMissingBytes, bufferCapacity)
+                                         : bufferCapacity};
+            return std::make_pair(position, numberOfBytesToTransfer);
+        }
 
         /**
          *
@@ -123,7 +172,6 @@ namespace Device {
         internals::Types::Buffer receptionByteBuffer{};
         internals::Types::Buffer extractionByteBuffer{};
         std::thread ioServiceThread{};
-        std::unique_ptr<RealtimeScan> realtimeScan{std::make_unique<RealtimeScan>(Data::Scan())};
         TcpScanFactory scanFactory{};
     };
 } // namespace Device

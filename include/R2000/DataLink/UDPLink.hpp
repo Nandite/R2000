@@ -96,11 +96,7 @@ namespace Device {
             unsigned int numberOfPoints{0u};
         };
     public:
-        UDPLink(std::shared_ptr<R2000> device, std::shared_ptr<DeviceHandle> handle);
-        [[nodiscard]] inline Data::Scan getLastScan() const override{
-            RealtimeScan::ScopedAccess <farbot::ThreadType::nonRealtime> scanGuard(*realtimeScan);
-            return *scanGuard;
-        };
+        UDPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle);
         ~UDPLink() override;
     private:
         /**
@@ -109,7 +105,47 @@ namespace Device {
          * @param byteTransferred
          */
         void handleBytesReception(const boost::system::error_code &error, unsigned int byteTransferred);
+        template<typename Iterator>
+        auto insertByteRangeIntoExtractionBuffer(Iterator begin, Iterator end) {
+            extractionByteBuffer.insert(std::cend(extractionByteBuffer), begin, end);
+            return std::make_pair(std::cbegin(extractionByteBuffer),
+                                  std::cend(extractionByteBuffer));
+        }
 
+        /**
+         *
+         * @tparam Iterator
+         * @param begin
+         * @param position
+         * @param end
+         */
+        template<typename Iterator>
+        void removeUsedByteRange(Iterator begin, Iterator position, Iterator end)
+        {
+            const auto remainingBytes{std::distance(position, end)};
+            if (remainingBytes) {
+                extractionByteBuffer.erase(begin, position);
+            } else {
+                extractionByteBuffer.clear();
+            }
+        }
+
+        template<typename Iterator>
+        Iterator tryExtractingScanFromByteRange(Iterator begin, Iterator end)
+        {
+            auto position{begin};
+            for (;;) {
+                const auto extractionResult{extractScanPacketFromByteRange(position, end, scanFactory)};
+                const auto hadEnoughBytes{std::get<0>(extractionResult)};
+                position = std::get<1>(extractionResult);
+                if (scanFactory.isComplete()) {
+                    setOutputScanFromCompletedFactory(scanFactory);
+                }
+                if (!hadEnoughBytes)
+                    break;
+            }
+            return position;
+        }
     private:
         boost::asio::io_service ioService{};
         std::unique_ptr<boost::asio::ip::udp::socket> socket{nullptr};
@@ -117,7 +153,6 @@ namespace Device {
         internals::Types::Buffer receptionByteBuffer{};
         internals::Types::Buffer extractionByteBuffer{};
         std::thread ioServiceThread{};
-        std::unique_ptr<RealtimeScan> realtimeScan{std::make_unique<RealtimeScan>(Data::Scan())};
         UdpScanFactory scanFactory{};
     };
 }
