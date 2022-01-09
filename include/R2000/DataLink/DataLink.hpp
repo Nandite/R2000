@@ -28,6 +28,7 @@ namespace Device {
             using Buffer = std::vector<Byte>;
         } // namespace Types
         const static std::uint16_t PACKET_START = 0xa25c;
+
         template<typename Iterator>
         static std::optional<std::pair<Iterator, Iterator>> retrievePacketMagic(Iterator begin, Iterator end) {
             constexpr auto byteSizeOf8Bits{sizeof(std::uint8_t)};
@@ -58,8 +59,9 @@ namespace Device {
         }
 
         template<typename Iterator, typename Callback>
-        static Iterator retrieve32bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf32bitsBlock,
-                                                          Callback callback) {
+        static Iterator
+        retrieve32bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf32bitsBlock,
+                                          Callback callback) {
             constexpr auto byteSizeOf32Bits{sizeof(std::uint32_t)};
             static_assert(byteSizeOf32Bits == 4, "The size of uint32_t must be 4 bytes");
             const auto numberOfBytes{(long unsigned int) std::distance(begin, end)};
@@ -78,8 +80,9 @@ namespace Device {
         }
 
         template<typename Iterator, typename Callback>
-        static Iterator retrieve48bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf48bitsBlock,
-                                                          Callback callback) {
+        static Iterator
+        retrieve48bitsFromAlignedSequence(Iterator begin, Iterator end, const unsigned int numberOf48bitsBlock,
+                                          Callback callback) {
             constexpr auto byteSizeOf32Bits{sizeof(std::uint32_t)};
             constexpr auto byteSizeOf16Bits{sizeof(std::uint16_t)};
             static_assert(byteSizeOf32Bits == 4, "The size of uint32_t must be 4 bytes");
@@ -100,6 +103,7 @@ namespace Device {
             }
             return position;
         }
+
         template<unsigned Type>
         struct PayloadExtractionFromByteSequence {
             template<typename Iterator>
@@ -113,7 +117,8 @@ namespace Device {
         struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::A)> {
             template<typename Iterator>
             static inline Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
-                                                   std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
+                                                   std::vector<uint32_t> &distances,
+                                                   std::vector<uint32_t> &amplitudes) {
                 return retrieve32bitsFromAlignedSequence(begin, end, numberOfPoints,
                                                          [&distances, &amplitudes](const uint32_t &distance) {
                                                              const auto nanOrDistance =
@@ -129,7 +134,8 @@ namespace Device {
         struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::B)> {
             template<typename Iterator>
             static inline Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
-                                                   std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
+                                                   std::vector<uint32_t> &distances,
+                                                   std::vector<uint32_t> &amplitudes) {
                 return retrieve48bitsFromAlignedSequence(begin, end, numberOfPoints,
                                                          [&distances, &amplitudes](const uint32_t &distance,
                                                                                    const uint16_t &amplitude) {
@@ -146,7 +152,8 @@ namespace Device {
         struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::C)> {
             template<typename Iterator>
             static inline Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
-                                                   std::vector<uint32_t> &distances, std::vector<uint32_t> &amplitudes) {
+                                                   std::vector<uint32_t> &distances,
+                                                   std::vector<uint32_t> &amplitudes) {
                 return retrieve32bitsFromAlignedSequence(begin, end, numberOfPoints,
                                                          [&distances, &amplitudes](const uint32_t &point) {
                                                              const auto distance{point & 0x000FFFFF};
@@ -166,20 +173,31 @@ namespace Device {
         public:
             inline virtual void addPacket(const Data::Header &header, std::vector<std::uint32_t> &inputDistances,
                                           std::vector<std::uint32_t> &inputAmplitudes) = 0;
+
             [[nodiscard]] virtual inline bool empty() const = 0;
+
             [[nodiscard]] virtual inline bool isComplete() const = 0;
+
             virtual inline Data::Scan operator*() = 0;
+
             virtual inline void clear() = 0;
+
             [[nodiscard]] virtual inline bool isDifferentScan(const Data::Header &header) const = 0;
+
             [[nodiscard]] virtual inline bool isNewScan(const Data::Header &header) = 0;
+
             virtual inline bool operator==(unsigned int scanNumber) const = 0;
+
             virtual inline bool operator!=(unsigned int scanNumber) const = 0;
+
             virtual inline void getHeaders(std::vector<Data::Header> &outputHeaders) const = 0;
         };
+
         template<typename F, typename... Ts>
         inline static std::future<typename std::result_of<F(Ts...)>::type> spawnAsync(F &&f, Ts &&... params) {
             return std::async(std::launch::async, std::forward<F>(f), std::forward<Ts>(params)...);
         }
+
     protected:
         using LockType = std::mutex;
         using Cv = std::condition_variable;
@@ -262,7 +280,10 @@ namespace Device {
             return *scanGuard;
         };
 
-        [[nodiscard]] virtual inline Device::Data::Scan waitForNextScan() {
+        [[nodiscard]] virtual inline std::pair<bool, Device::Data::Scan> waitForNextScan() {
+            if (!isConnected.load(std::memory_order_acquire)) {
+                return {false, {}};
+            }
             std::unique_lock<LockType> guard(waitForScanLock);
             const auto scanCountBeforeWaiting{scanCounter};
             scanAvailableCv.wait(guard, [this, &scanCountBeforeWaiting]() {
@@ -270,7 +291,7 @@ namespace Device {
                 return interruptFlag.load(std::memory_order_acquire) ||
                        (scanCountBeforeWaiting != scanCountWhileWaiting);
             });
-            return getLastScan();
+            return {true, getLastScan()};
         }
 
         virtual ~DataLink();

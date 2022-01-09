@@ -47,11 +47,13 @@ Device::DataLink::~DataLink() {
         if (deviceHandle->watchdogEnabled)
             watchdogTask.wait();
 
-        if (!Device::Commands::StopScanCommand{*device}.execute(*deviceHandle)) {
-            std::clog << __func__ << ": Could not stop the data stream." << std::endl;
-        }
-        if (!Device::Commands::ReleaseHandleCommand{*device}.execute(*deviceHandle)) {
-            std::clog << __func__ << ": Could not release the handle." << std::endl;
+        if (isConnected.load(std::memory_order_acquire)) {
+            if (!Device::Commands::StopScanCommand{*device}.execute(*deviceHandle)) {
+                std::clog << __func__ << ": Could not stop the data stream." << std::endl;
+            }
+            if (!Device::Commands::ReleaseHandleCommand{*device}.execute(*deviceHandle)) {
+                std::clog << __func__ << ": Could not release the handle." << std::endl;
+            }
         }
     }
 }
