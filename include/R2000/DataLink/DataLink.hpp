@@ -290,10 +290,10 @@ namespace Device {
 
     private:
         std::future<void> watchdogTask{};
+        std::uint64_t scanCounter{0u};
         Cv interruptCv{};
         LockType interruptCvLock{};
         std::atomic_bool interruptFlag{false};
-        std::uint64_t scanCounter{0u};
     protected:
         std::unique_ptr<RealtimeScan> realtimeScan{std::make_unique<RealtimeScan>(Data::Scan())};
         Cv scanAvailableCv{};

@@ -48,7 +48,7 @@ Device::UDPLink::UDPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceH
                                    [this](const boost::system::error_code &error, const unsigned int byteTransferred) {
                                        handleBytesReception(error, byteTransferred);
                                    });
-        ioServiceThread = std::thread([this]() {
+        ioServiceTask = std::async(std::launch::async, [this]() {
             ioService.run();
         });
     }
@@ -62,8 +62,8 @@ void Device::UDPLink::handleBytesReception(const boost::system::error_code &erro
     }
     const auto begin{std::cbegin(receptionByteBuffer)};
     const auto end{std::next(begin, byteTransferred)};
-    const auto range {insertByteRangeIntoExtractionBuffer(begin, end)};
-    auto position {tryExtractingScanFromByteRange(range.first, range.second)};
+    const auto range{insertByteRangeIntoExtractionBuffer(begin, end)};
+    auto position{tryExtractingScanFromByteRange(range.first, range.second)};
     removeUsedByteRange(range.first, position, range.second);
     socket->async_receive_from(boost::asio::buffer(receptionByteBuffer), endPoint,
                                [this](const boost::system::error_code &error,
@@ -73,10 +73,10 @@ void Device::UDPLink::handleBytesReception(const boost::system::error_code &erro
 }
 
 Device::UDPLink::~UDPLink() {
-    if (!ioService.stopped())
+    if (!ioService.stopped()) {
         ioService.stop();
-    if (ioServiceThread.joinable())
-        ioServiceThread.join();
+        ioServiceTask.wait();
+    }
     boost::system::error_code placeholder;
     socket->shutdown(boost::asio::ip::udp::socket::shutdown_receive, placeholder);
     socket->close(placeholder);

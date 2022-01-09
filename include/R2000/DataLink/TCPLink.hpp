@@ -78,6 +78,16 @@ namespace Device {
 
         /**
          *
+         */
+        inline void backoffStrategySocketConnection();
+        /**
+         *
+         * @return
+         */
+        inline bool tryConnectSocketOnce();
+
+        /**
+         *
          * @param error
          * @param byteTransferred
          */
@@ -167,11 +177,15 @@ namespace Device {
         }
 
     private:
+        std::future<void> socketConnectionTask{};
         boost::asio::io_service ioService{};
         std::unique_ptr<boost::asio::ip::tcp::socket> socket{nullptr};
         internals::Types::Buffer receptionByteBuffer{};
         internals::Types::Buffer extractionByteBuffer{};
-        std::thread ioServiceThread{};
+        std::future<void> ioServiceTask{};
         TcpScanFactory scanFactory{};
+        Cv interruptConnectionCv{};
+        LockType interruptConnectionCvLock{};
+        std::atomic_bool interruptConnectionFlag{false};
     };
 } // namespace Device

@@ -14,35 +14,59 @@ Device::TCPLink::TCPLink(std::shared_ptr<R2000> iDevice,
           socket(std::make_unique<boost::asio::ip::tcp::socket>(ioService)),
           receptionByteBuffer(DEFAULT_RECEPTION_BUFFER_SIZE, 0),
           extractionByteBuffer(EXTRACTION_BUFFER_SIZE, 0) {
+    socketConnectionTask = std::async(std::launch::async, &Device::TCPLink::backoffStrategySocketConnection, this);
+}
+
+bool Device::TCPLink::tryConnectSocketOnce() {
     const auto hostname{device->getHostname()};
     const auto port{deviceHandle->port};
     boost::asio::ip::tcp::resolver resolver{ioService};
     boost::asio::ip::tcp::resolver::query query{hostname.to_string(), std::to_string(port)};
     auto endpoints{resolver.resolve(query)};
-
     boost::system::error_code error{boost::asio::error::host_not_found};
     for (boost::asio::ip::tcp::resolver::iterator end{};
-         error && endpoints != end;
+         error && endpoints != end && !interruptConnectionFlag.load(std::memory_order_acquire);
          ++endpoints) {
         boost::system::error_code placeholder{};
         socket->shutdown(boost::asio::ip::tcp::socket::shutdown_both, placeholder);
         socket->close(placeholder);
-        socket = std::make_unique<boost::asio::ip::tcp::socket>(ioService);
+        //socket = std::make_unique<boost::asio::ip::tcp::socket>(ioService);
         socket->connect(*endpoints, error);
     }
     if (!error) {
         isConnected.store(true, std::memory_order_release);
         boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
-                                boost::asio::transfer_exactly(DEFAULT_RECEPTION_BUFFER_SIZE),
-                                [this](const boost::system::error_code &error, const unsigned int byteTransferred) {
+                                boost::asio::transfer_exactly(
+                                        DEFAULT_RECEPTION_BUFFER_SIZE),
+                                [this](const boost::system::error_code &error,
+                                       const unsigned int byteTransferred) {
                                     handleBytesReception(error, byteTransferred);
                                 });
-        ioServiceThread = std::thread([this]() {
+        ioServiceTask = std::async(std::launch::async, [this]() {
             ioService.run();
         });
     } else {
-        std::clog << "Could not join the device (" << error.message() << ")" << std::endl;
+        std::clog << "Could not join the device (" << error.message() << ")"
+                  << std::endl;
         isConnected.store(false, std::memory_order_release);
+    }
+
+    return !isConnected.load(std::memory_order_acquire) &&
+           !interruptConnectionFlag.load(std::memory_order_acquire);
+}
+
+void Device::TCPLink::backoffStrategySocketConnection() {
+    for (; !interruptConnectionFlag.load(std::memory_order_acquire);) {
+        Retry::ExponentialBackoff(std::numeric_limits<unsigned int>::max(), 100ms, 20000ms,
+                                  [this](const auto &duration) {
+                                      std::unique_lock<LockType> interruptGuard{interruptConnectionCvLock,
+                                                                                std::adopt_lock};
+                                      interruptConnectionCv.wait_for(interruptGuard, duration, [this]() -> bool {
+                                          return interruptConnectionFlag.load(std::memory_order_acquire);
+                                      });
+                                  },
+                                  Retry::ForwardStatus,
+                                  &Device::TCPLink::tryConnectSocketOnce, this);
     }
 }
 
@@ -55,7 +79,7 @@ void Device::TCPLink::handleBytesReception(const boost::system::error_code &erro
     }
     const auto begin{std::cbegin(receptionByteBuffer)};
     const auto end{std::next(begin, byteTransferred)};
-    const auto range {insertByteRangeIntoExtractionBuffer(begin, end)};
+    const auto range{insertByteRangeIntoExtractionBuffer(begin, end)};
     const auto extractionResult{tryExtractingScanFromByteRange(range.first, range.second)};
     removeUsedByteRange(range.first, extractionResult.first, range.second);
     boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
@@ -66,10 +90,18 @@ void Device::TCPLink::handleBytesReception(const boost::system::error_code &erro
 }
 
 Device::TCPLink::~TCPLink() {
-    if (!ioService.stopped())
+    if (!interruptConnectionFlag.load(std::memory_order_acquire)) {
+        {
+            std::unique_lock<LockType> guard(interruptConnectionCvLock, std::adopt_lock);
+            interruptConnectionFlag.store(true, std::memory_order_release);
+            interruptConnectionCv.notify_one();
+        }
+        socketConnectionTask.wait();
+    }
+    if (!ioService.stopped()) {
         ioService.stop();
-    if (ioServiceThread.joinable())
-        ioServiceThread.join();
+        ioServiceTask.wait();
+    }
     boost::system::error_code placeholder;
     socket->shutdown(boost::asio::ip::tcp::socket::shutdown_receive, placeholder);
     socket->close(placeholder);

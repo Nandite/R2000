@@ -152,7 +152,7 @@ namespace Device {
         boost::asio::ip::udp::endpoint endPoint{};
         internals::Types::Buffer receptionByteBuffer{};
         internals::Types::Buffer extractionByteBuffer{};
-        std::thread ioServiceThread{};
+        std::future<void> ioServiceTask{};
         UdpScanFactory scanFactory{};
     };
 }
