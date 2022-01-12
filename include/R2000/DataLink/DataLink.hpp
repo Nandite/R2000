@@ -6,18 +6,18 @@
 
 #pragma once
 
+#include "Farbot.hpp"
 #include "R2000/Data.hpp"
 #include "R2000/R2000.hpp"
 #include <atomic>
 #include <cassert>
 #include <climits>
+#include <cmath>
 #include <condition_variable>
 #include <deque>
 #include <future>
 #include <mutex>
 #include <optional>
-#include <cmath>
-#include "R2000/Farbot.hpp"
 
 namespace Device {
 

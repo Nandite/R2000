@@ -54,3 +54,12 @@ target_link_libraries(DeviceWatcher
         ${CMAKE_DL_LIBS}
         ${Boost_PROGRAM_OPTIONS_LIBRARIES}
         ${Boost_LIBRARIES})
+
+add_executable(AsyncCommand include
+        src/R2000/R2000.cpp
+        src/Backtrace.cpp
+        AsyncCommand.cpp include/R2000/Worker.hpp include/R2000/Commands.hpp)
+target_link_libraries(AsyncCommand
+        ${CMAKE_DL_LIBS}
+        ${Boost_PROGRAM_OPTIONS_LIBRARIES}
+        ${Boost_LIBRARIES})

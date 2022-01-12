@@ -273,8 +273,7 @@ int main(int argc, char **argv) {
              "Scan frequency")
             ("packet_type", boost::program_options::value<std::string>()->default_value("A"),
              "Packet type (A, B or C).")
-            ("watchdog,w", boost::program_options::value<std::string>()->default_value("20000"),
-             "Enable watchdog with timeout value.");
+            ("watchdog,w","Enable watchdog with timeout value.");
     try {
         boost::program_options::parsed_options parsedProgramOptions{
                 boost::program_options::command_line_parser(argc, argv).options(programOptionsDescriptions).run()};
@@ -441,8 +440,10 @@ int main(int argc, char **argv) {
     while (!viewer.wasStopped()) {
         viewer.spinOnce();
         const auto &scan{dataLink->waitForNextScan()};
+        if(!scan.first)
+            continue;
         pcl::PointCloud<Point>::Ptr cloud{new pcl::PointCloud<Point>};
-        converter.convert(scan, *cloud);
+        converter.convert(scan.second, *cloud);
         PointCloudColorHandler scannedCloudColor{cloud, 0, 240, 0};
         viewer.removePointCloud(VIEWER_SCAN_CLOUD_ID, port);
         viewer.addPointCloud(cloud, scannedCloudColor, VIEWER_SCAN_CLOUD_ID, port);

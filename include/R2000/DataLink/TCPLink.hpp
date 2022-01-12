@@ -121,15 +121,6 @@ namespace Device {
          */
         void handleSocketConnection(boost::system::error_code error,
                                     const boost::asio::ip::tcp::resolver::iterator &endpoint);
-//        /**
-//         *
-//         */
-//        inline void backoffStrategySocketConnection();
-//        /**
-//         *
-//         * @return
-//         */
-//        inline bool tryConnectSocketOnce();
 
         /**
          *
