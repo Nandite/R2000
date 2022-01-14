@@ -20,7 +20,7 @@ namespace basio = boost::asio;
  */
 std::string formatDeviceStatus(const Device::R2000 &device, const Device::DeviceStatus &status) {
     std::stringstream stream{};
-    const auto version{device.getDeviceProtocolVersion()};
+    const auto version{device.getProtocolVersion()};
     const auto &statusFlags{status.getStatusFlags()};
     constexpr auto columnWidth{55u};
     constexpr auto flagsColumnWidth{63u};

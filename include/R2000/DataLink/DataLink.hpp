@@ -6,9 +6,10 @@
 
 #pragma once
 
+#include "Data.hpp"
 #include "Farbot.hpp"
-#include "R2000/Data.hpp"
 #include "R2000/R2000.hpp"
+#include <R2000/Control/Parameters.hpp>
 #include <atomic>
 #include <cassert>
 #include <climits>
@@ -114,7 +115,7 @@ namespace Device {
         };
 
         template<>
-        struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::A)> {
+        struct PayloadExtractionFromByteSequence<Data::underlyingType(Parameters::PACKET_TYPE::A)> {
             template<typename Iterator>
             static inline Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
                                                    std::vector<uint32_t> &distances,
@@ -131,7 +132,7 @@ namespace Device {
         };
 
         template<>
-        struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::B)> {
+        struct PayloadExtractionFromByteSequence<Data::underlyingType(Parameters::PACKET_TYPE::B)> {
             template<typename Iterator>
             static inline Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
                                                    std::vector<uint32_t> &distances,
@@ -149,7 +150,7 @@ namespace Device {
         };
 
         template<>
-        struct PayloadExtractionFromByteSequence<Data::underlyingType(Device::PACKET_TYPE::C)> {
+        struct PayloadExtractionFromByteSequence<Data::underlyingType(Parameters::PACKET_TYPE::C)> {
             template<typename Iterator>
             static inline Iterator retrievePayload(Iterator begin, Iterator end, const unsigned int numberOfPoints,
                                                    std::vector<uint32_t> &distances,
@@ -204,7 +205,9 @@ namespace Device {
         using RealtimeScan = farbot::RealtimeObject<Data::Scan, farbot::RealtimeObjectOptions::realtimeMutatable>;
         static constexpr unsigned int MAX_RESERVE_POINTS_BUFFER{1024u};
     protected:
-        DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle);
+        DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle, std::chrono::milliseconds timeout);
+
+        void watchdogTask(std::chrono::seconds timeout);
 
         /**
          *
@@ -217,9 +220,9 @@ namespace Device {
         template<typename Iterator>
         static std::tuple<bool, Iterator, unsigned int>
         extractScanPacketFromByteRange(Iterator begin, Iterator end, ScanFactory &scanFactory) {
-            static constexpr auto A{Data::underlyingType(Device::PACKET_TYPE::A)};
-            static constexpr auto B{Data::underlyingType(Device::PACKET_TYPE::B)};
-            static constexpr auto C{Data::underlyingType(Device::PACKET_TYPE::C)};
+            static constexpr auto A{Data::underlyingType(Parameters::PACKET_TYPE::A)};
+            static constexpr auto B{Data::underlyingType(Parameters::PACKET_TYPE::B)};
+            static constexpr auto C{Data::underlyingType(Parameters::PACKET_TYPE::C)};
 
             auto result{internals::retrievePacketHeader(begin, end)};
             if (!result)
@@ -310,7 +313,7 @@ namespace Device {
         }
 
     private:
-        std::future<void> watchdogTask{};
+        std::optional<std::future<void>> watchdogTaskFuture{std::nullopt};
         std::uint64_t scanCounter{0u};
         Cv interruptCv{};
         LockType interruptCvLock{};

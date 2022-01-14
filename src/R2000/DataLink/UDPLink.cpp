@@ -6,7 +6,7 @@
 
 #include <utility>
 #include <iostream>
-#include "R2000/DeviceHandle.hpp"
+#include "R2000/Control/DeviceHandle.hpp"
 #include "R2000/DataLink/UDPLink.hpp"
 
 Device::UDPLink::UDPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle)

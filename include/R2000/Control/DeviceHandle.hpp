@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Data.hpp"
+#include "R2000/DataLink/Data.hpp"
 #include <boost/asio.hpp>
 
 namespace Device {

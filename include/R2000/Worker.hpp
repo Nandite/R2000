@@ -54,9 +54,9 @@ public:
     }
 
     template<typename... Args>
-    bool pushJob(Args &&... args) {
+    inline bool pushJob(Args &&... args) {
         std::lock_guard<std::mutex> guard(jobLock);
-        if (jobs.size() < maxJob) {
+        if (jobs.size() <= maxJob) {
             jobs.push_back(std::bind(std::forward<Args>(args)...));
             jobQueueCondition.notify_one();
             return true;
