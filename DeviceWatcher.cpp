@@ -1,3 +1,5 @@
+
+#include "R2000/Control/Commands.hpp"
 #include "R2000/R2000.hpp"
 #include "R2000/StatusWatcher.hpp"
 #include <boost/asio.hpp>
@@ -18,9 +20,9 @@ namespace basio = boost::asio;
  * @param status
  * @return
  */
-std::string formatDeviceStatus(const Device::R2000 &device, const Device::DeviceStatus &status) {
+std::string
+formatDeviceStatus(const Device::R2000 &device, const Device::DeviceStatus &status, Device::Parameters::PFSDP version) {
     std::stringstream stream{};
-    const auto version{device.getProtocolVersion()};
     const auto &statusFlags{status.getStatusFlags()};
     constexpr auto columnWidth{55u};
     constexpr auto flagsColumnWidth{63u};
@@ -52,7 +54,7 @@ std::string formatDeviceStatus(const Device::R2000 &device, const Device::Device
            << std::endl;
     stream << std::left << std::setw(flagsColumnWidth) << "+ Unstable head rotation :"
            << statusFlags.headHasUnstableRotation() << std::endl;
-    if (version >= Device::PFSDP::V103) {
+    if (version >= Device::Parameters::PFSDP::V103) {
         stream << std::left << std::setw(flagsColumnWidth) << "+ Lens contamination (warning) :"
                << statusFlags.hasLensContaminationWarning() << std::endl;
         stream << std::left << std::setw(flagsColumnWidth) << "+ Lens contamination (Error) :"
@@ -110,18 +112,29 @@ int main(int argc, char **argv) {
     const auto outputPath{programOptions["output"].as<std::string>()};
     const auto device{Device::R2000::makeShared({"R2000", deviceAddress})};
 
+
+    Device::Commands::GetProtocolVersionCommand getProtocolVersion{*device};
+    auto future{getProtocolVersion.asyncExecute(3s)};
+    future.wait();
+    auto result{future.get()};
+    if (result.first != Device::AsyncRequestResult::SUCCESS) {
+        std::clog << "Could not get the device version (" << Device::asyncResultToString(result.first) << ")"
+                  << std::endl;
+    }
+    auto deviceVersion{result.second};
+
     std::unique_ptr<Device::StatusWatcher<std::chrono::seconds>> statusWatcher{nullptr};
     if (outputPath.empty()) {
         statusWatcher = std::make_unique<Device::StatusWatcher<std::chrono::seconds>>(
-                device, 1s, 30s, [&device](const Device::DeviceStatus &status) {
-                    const auto statusAsString{formatDeviceStatus(*device, status)};
+                device, 10s, [&device, deviceVersion](const Device::DeviceStatus &status) -> void {
+                    const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
                     std::cout << statusAsString << std::endl;
                 }
         );
     } else {
         statusWatcher = std::make_unique<Device::StatusWatcher<std::chrono::seconds>>(
-                device, 1s, 30s, [&device, &outputPath](const Device::DeviceStatus &status) {
-                    const auto statusAsString{formatDeviceStatus(*device, status)};
+                device, 10s, [&device, &outputPath, deviceVersion](const Device::DeviceStatus &status) -> void {
+                    const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
                     std::ofstream stream(outputPath, std::ios::trunc);
                     if (!stream.is_open())
                         return;

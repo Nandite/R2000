@@ -222,7 +222,6 @@ namespace Device {
         Cv interruptAsyncOpsCv{};
         LockType interruptAsyncOpsCvLock{};
         std::atomic_bool interruptAsyncOpsFlag{false};
-        /////////////////////////////////////////////////////////////
         boost::asio::steady_timer deadline{ioService};
         boost::asio::ip::tcp::resolver resolver{ioService};
         boost::asio::ip::tcp::resolver::results_type endPoints{};

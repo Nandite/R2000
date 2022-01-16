@@ -11,7 +11,7 @@
 
 Device::TCPLink::TCPLink(std::shared_ptr<R2000> iDevice,
                          std::shared_ptr<DeviceHandle> iHandle) noexcept(false)
-        : DataLink(std::move(iDevice), std::move(iHandle)),
+        : DataLink(std::move(iDevice), std::move(iHandle), 1s),
           socket(std::make_unique<boost::asio::ip::tcp::socket>(ioService)),
           receptionByteBuffer(DEFAULT_RECEPTION_BUFFER_SIZE, 0),
           extractionByteBuffer(EXTRACTION_BUFFER_SIZE, 0) {
@@ -103,14 +103,12 @@ Device::TCPLink::~TCPLink() {
     }
     resolver.cancel();
     boost::system::error_code placeholder;
-    socket->cancel(placeholder);
     socket->shutdown(boost::asio::ip::tcp::socket::shutdown_receive, placeholder);
     socket->close(placeholder);
     if (!ioService.stopped()) {
         ioService.stop();
         ioServiceTask.wait();
     }
-    isConnected.store(false, std::memory_order_release);
 }
 
 

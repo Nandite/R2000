@@ -12,6 +12,7 @@
 #include <list>
 #include <mutex>
 #include <future>
+#include <iostream>
 
 class Worker {
 public:

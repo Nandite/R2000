@@ -1,4 +1,5 @@
 #include "Backtrace.hpp"
+#include "R2000/Control/Parameters.hpp"
 #include "R2000/DataLink/DataLinkBuilder.hpp"
 #include "R2000/R2000.hpp"
 #include "ScanToPointCloud.hpp"
@@ -86,18 +87,29 @@ std::optional<std::pair<std::string, unsigned short>> splitAddressAndPort(const 
  */
 bool configureDevice(Device::R2000 &device, const std::string &frequency, const std::string &samplePerScan) {
     Device::Commands::SetParametersCommand setParametersCommand{device};
-    return setParametersCommand.execute(Device::ReadWriteParameters::HmiDisplay()
-                                                .unlockHmiButton()
-                                                .unlockHmiParameters()
-                                                .withHmiLanguage(Device::Language::ENGLISH)
-                                                .withHmiDisplayMode(Device::HMI_DISPLAY_MODE::APPLICATION_TEXT)
-                                                .withHmiApplicationText1("Scan")
-                                                .withHmiApplicationText2("Acquisition"),
-                                        Device::ReadWriteParameters::Measure()
-                                                .withOperatingMode(Device::OPERATING_MODE::MEASURE)
-                                                .withScanFrequency(frequency)
-                                                .withSamplesPerScan(samplePerScan)
-                                                .withScanDirection(Device::SCAN_DIRECTION::CCW));
+    const auto hmiBuilder{Device::Parameters::ReadWriteParameters::HmiDisplay()
+                                  .unlockHmiButton()
+                                  .unlockHmiParameters()
+                                  .withHmiLanguage(Device::Parameters::Language::ENGLISH)
+                                  .withHmiDisplayMode(Device::Parameters::HMI_DISPLAY_MODE::APPLICATION_TEXT)
+                                  .withHmiApplicationText1("Scan")
+                                  .withHmiApplicationText2("Acquisition")};
+    const auto measureBuilder{Device::Parameters::ReadWriteParameters::Measure()
+                                      .withOperatingMode(Device::Parameters::OPERATING_MODE::MEASURE)
+                                      .withScanFrequency(frequency)
+                                      .withSamplesPerScan(samplePerScan)
+                                      .withScanDirection(Device::Parameters::SCAN_DIRECTION::CCW)};
+    auto future{setParametersCommand.asyncExecute(1s, hmiBuilder, measureBuilder)};
+    if (!future)
+        return false;
+    future->wait();
+    const auto requestResult{future->get()};
+    const auto hasSucceed{requestResult == Device::AsyncRequestResult::SUCCESS};
+    if (!hasSucceed) {
+        std::clog << "Device is not reachable (" << Device::asyncResultToString(requestResult) << ") at "
+                  << device.getHostname() << std::endl;
+    }
+    return hasSucceed;
 }
 
 /**
@@ -105,11 +117,11 @@ bool configureDevice(Device::R2000 &device, const std::string &frequency, const 
  * @param arg
  * @return
  */
-std::optional<Device::PACKET_TYPE> packetTypeFromArgument(const std::string &arg) {
-    const std::unordered_map<std::string, Device::PACKET_TYPE> scanPacketFromString{
-            {"A", Device::PACKET_TYPE::A},
-            {"B", Device::PACKET_TYPE::B},
-            {"C", Device::PACKET_TYPE::C}};
+std::optional<Device::Parameters::PACKET_TYPE> packetTypeFromArgument(const std::string &arg) {
+    const std::unordered_map<std::string, Device::Parameters::PACKET_TYPE> scanPacketFromString{
+            {"A", Device::Parameters::PACKET_TYPE::A},
+            {"B", Device::Parameters::PACKET_TYPE::B},
+            {"C", Device::Parameters::PACKET_TYPE::C}};
     auto localCopyOfArg{arg};
     boost::to_upper(localCopyOfArg);
     if (scanPacketFromString.count(localCopyOfArg) > 0)
@@ -273,7 +285,7 @@ int main(int argc, char **argv) {
              "Scan frequency")
             ("packet_type", boost::program_options::value<std::string>()->default_value("A"),
              "Packet type (A, B or C).")
-            ("watchdog,w","Enable watchdog with timeout value.");
+            ("watchdog,w", "Enable watchdog with timeout value.");
     try {
         boost::program_options::parsed_options parsedProgramOptions{
                 boost::program_options::command_line_parser(argc, argv).options(programOptionsDescriptions).run()};
@@ -321,7 +333,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    auto packetType{Device::PACKET_TYPE::A};
+    auto packetType{Device::Parameters::PACKET_TYPE::A};
     if (programOptions.count("packet_type") > 0) {
         const auto packetTypeArgument{programOptions["packet_type"].as<std::string>()};
         const auto parsedPacketType{packetTypeFromArgument(packetTypeArgument)};
@@ -366,11 +378,11 @@ int main(int argc, char **argv) {
     }
 
     const auto validUHDParameters{
-            validateResolutionAndFrequency(*samplePerScan, (unsigned int)(*frequency), UHD_RESOLUTION_FREQUENCY)};
+            validateResolutionAndFrequency(*samplePerScan, (unsigned int) (*frequency), UHD_RESOLUTION_FREQUENCY)};
     const auto validHDParameters{
-            validateResolutionAndFrequency(*samplePerScan, (unsigned int)(*frequency), HD_RESOLUTION_FREQUENCY)};
+            validateResolutionAndFrequency(*samplePerScan, (unsigned int) (*frequency), HD_RESOLUTION_FREQUENCY)};
     const auto validSDParameters{
-            validateResolutionAndFrequency(*samplePerScan, (unsigned int)(*frequency), SD_RESOLUTION_FREQUENCY)};
+            validateResolutionAndFrequency(*samplePerScan, (unsigned int) (*frequency), SD_RESOLUTION_FREQUENCY)};
     if (!validUHDParameters && !validHDParameters && !validSDParameters) {
         std::clog << "The provided scan resolution/frequency is not valid. Use the option --table to show the supported"
                      " scan resolution/frequency combination." << std::endl;
@@ -396,7 +408,7 @@ int main(int argc, char **argv) {
             return EXIT_FAILURE;
         }
         std::cout << "Device configuration done. Setting up data link..." << std::endl;
-        auto handleParameters{Device::ReadWriteParameters::UdpHandle{}
+        auto handleParameters{Device::Parameters::ReadWriteParameters::UdpHandle{}
                                       .withHostname(target->first)
                                       .withPort(target->second)
                                       .withPacketType(packetType)
@@ -405,23 +417,40 @@ int main(int argc, char **argv) {
             handleParameters.withWatchdog()
                     .withWatchdogTimeout(*watchdog);
         }
-        dataLink = Device::DataLinkBuilder(handleParameters).build(device);
+        auto future{Device::DataLinkBuilder(handleParameters).build(device, 3s)};
+        future.wait();
+        auto result{future.get()};
+        const auto asyncRequestResult = result.first;
+        if (asyncRequestResult != Device::AsyncRequestResult::SUCCESS) {
+            std::clog << "Could not establish data link with sensor at " << device->getHostname() << " ("
+                      << Device::asyncResultToString(asyncRequestResult) << ")" << std::endl;
+            return EXIT_FAILURE;
+        }
+        dataLink = result.second;
     } else {
         if (!configureDevice(*device, frequencyAsString, samplePerScanAsString)) {
             std::clog << "Could not set the parameters on the sensor." << std::endl;
             return EXIT_FAILURE;
         }
         std::cout << "Device configuration done. Setting up data link..." << std::endl;
-        auto handleParameters{
-                Device::ReadWriteParameters::TcpHandle{}
-                        .withPacketType(packetType)
-                        .withStartAngle(-1800000)
+        auto handleParameters{Device::Parameters::ReadWriteParameters::TcpHandle{}
+                                      .withPacketType(packetType)
+                                      .withStartAngle(-1800000)
         };
         if (watchdog) {
             handleParameters.withWatchdog()
                     .withWatchdogTimeout(*watchdog);
         }
-        dataLink = Device::DataLinkBuilder(handleParameters).build(device);
+        auto future{Device::DataLinkBuilder(handleParameters).build(device, 3s)};
+        future.wait();
+        auto result{future.get()};
+        const auto asyncRequestResult = result.first;
+        if (asyncRequestResult != Device::AsyncRequestResult::SUCCESS) {
+            std::clog << "Could not establish data link with sensor at " << device->getHostname() << " ("
+                      << Device::asyncResultToString(asyncRequestResult) << ")" << std::endl;
+            return EXIT_FAILURE;
+        }
+        dataLink = result.second;
     }
     std::this_thread::sleep_for(1s);
     if (dataLink && dataLink->isAlive()) {
@@ -440,7 +469,7 @@ int main(int argc, char **argv) {
     while (!viewer.wasStopped()) {
         viewer.spinOnce();
         const auto &scan{dataLink->waitForNextScan()};
-        if(!scan.first)
+        if (!scan.first)
             continue;
         pcl::PointCloud<Point>::Ptr cloud{new pcl::PointCloud<Point>};
         converter.convert(scan.second, *cloud);

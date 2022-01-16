@@ -1,8 +1,10 @@
 #pragma once
 
+#include "Control/Commands.hpp"
 #include "R2000.hpp"
 #include <unordered_map>
 #include <any>
+#include <bitset>
 
 #define PARAMETER_STATUS_FLAGS "status_flags"
 #define PARAMETER_STATUS_LOAD_INDICATION "load_indication"
@@ -163,7 +165,7 @@ namespace Device {
          * @return
          */
         template<typename T>
-        static inline std::any getAsAnyOrNullopt(const Device::ParametersMap &parameters,
+        static inline std::any getAsAnyOrNullopt(const Parameters::ParametersMap &parameters,
                                                  const std::string &key) noexcept(false) {
             if (!parameters.count(key))
                 return std::nullopt;
@@ -174,14 +176,14 @@ namespace Device {
          *
          * @param systemStatusMap
          */
-        explicit DeviceStatus(Device::ParametersMap systemStatusMap);
+        explicit DeviceStatus(Parameters::ParametersMap systemStatusMap);
 
     public:
         /**
          *
          * @return
          */
-        inline StatusFlagInterpretation getStatusFlags() const {
+        [[nodiscard]] inline StatusFlagInterpretation getStatusFlags() const {
             const auto any{getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_FLAGS)};
             return any.has_value() ?
                    StatusFlagInterpretation(QuietAnyCastHelper<uint32_t>::castQuietly(any))
@@ -192,7 +194,7 @@ namespace Device {
          *
          * @return
          */
-        inline uint64_t getCpuLoad() const {
+        [[nodiscard]] inline uint64_t getCpuLoad() const {
             return QuietAnyCastHelper<uint64_t>::castQuietly(
                     getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_LOAD_INDICATION));
         }
@@ -201,7 +203,7 @@ namespace Device {
          *
          * @return
          */
-        inline uint64_t getRawSystemTime() const {
+        [[nodiscard]] inline uint64_t getRawSystemTime() const {
             return QuietAnyCastHelper<uint64_t>::castQuietly(
                     getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_SYSTEM_TIME_RAW));
         }
@@ -210,7 +212,7 @@ namespace Device {
          *
          * @return
          */
-        inline uint64_t getUptime() const {
+        [[nodiscard]] inline uint64_t getUptime() const {
             return QuietAnyCastHelper<uint64_t>::castQuietly(
                     getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_UP_TIME));
         }
@@ -219,7 +221,7 @@ namespace Device {
          *
          * @return
          */
-        inline uint64_t getPowerCyclesCount() const {
+        [[nodiscard]] inline uint64_t getPowerCyclesCount() const {
             return QuietAnyCastHelper<uint64_t>::castQuietly(
                     getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_POWER_CYCLES));
         }
@@ -228,7 +230,7 @@ namespace Device {
          *
          * @return
          */
-        inline uint64_t getOperationTime() const {
+        [[nodiscard]] inline uint64_t getOperationTime() const {
             return QuietAnyCastHelper<uint64_t>::castQuietly(
                     getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_OPERATION_TIME));
         }
@@ -237,7 +239,7 @@ namespace Device {
          *
          * @return
          */
-        inline uint64_t getScaledOperationTime() const {
+        [[nodiscard]] inline uint64_t getScaledOperationTime() const {
             return QuietAnyCastHelper<uint64_t>::castQuietly(
                     getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_OPERATION_TIME_SCALED));
         }
@@ -246,7 +248,7 @@ namespace Device {
          *
          * @return
          */
-        inline uint64_t getCurrentTemperature() const {
+        [[nodiscard]] inline uint64_t getCurrentTemperature() const {
             return QuietAnyCastHelper<uint64_t>::castQuietly(
                     getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_CURRENT));
         }
@@ -255,7 +257,7 @@ namespace Device {
          *
          * @return
          */
-        inline uint64_t getMinimalTemperature() const {
+        [[nodiscard]] inline uint64_t getMinimalTemperature() const {
             return QuietAnyCastHelper<uint64_t>::castQuietly(
                     getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_MIN));
         }
@@ -264,13 +266,14 @@ namespace Device {
          *
          * @return
          */
-        inline uint64_t getMaximalTemperature() const {
+        [[nodiscard]] inline uint64_t getMaximalTemperature() const {
             return QuietAnyCastHelper<uint64_t>::castQuietly(
                     getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_MAX));
         }
 
     private:
-        Device::ParametersMap systemStatusMap;
+        Parameters::ParametersMap systemStatusMap;
+
         template<typename T> friend
         class StatusWatcher;
     };
@@ -285,57 +288,15 @@ namespace Device {
         /**
          *
          * @param sharedDevice
-         * @param lowPeriod
-         * @param highPeriod
+         * @param period
          * @param callback
          */
         StatusWatcher(std::shared_ptr<R2000> sharedDevice,
-                      Duration lowPeriod,
-                      Duration highPeriod,
+                      Duration period,
                       OnStatusAvailableCallback callback) : device(std::move(sharedDevice)),
-                                                            lowSleepPeriod(lowPeriod),
-                                                            highSleepPeriod(highPeriod) {
+                                                            period(period) {
             callbacks.push_back(std::move(callback));
-            statusWatcherTask = std::async(std::launch::async, [this]() {
-                const auto threadId{device->getName() + ".StatusWatcher"};
-                pthread_setname_np(pthread_self(), threadId.c_str());
-                Device::Commands::GetParametersCommand commandExecutor{*device};
-                for (; !interruptFlag.load(std::memory_order_acquire);) {
-                    Retry::ExponentialBackoff(
-                            std::numeric_limits<unsigned int>::max(), lowSleepPeriod, highSleepPeriod,
-                            [this](const auto &duration) {
-                                std::unique_lock<LockType> interruptGuard{interruptCvLock, std::adopt_lock};
-                                cv.wait_for(interruptGuard, duration, [this]() -> bool {
-                                    return interruptFlag.load(std::memory_order_acquire);
-                                });
-                            },
-                            Retry::ForwardStatus,
-                            [this, &commandExecutor]() -> bool {
-                                const auto parameters{
-                                        commandExecutor.template execute(systemStatusBuilder)};
-                                if (parameters) {
-                                    isConnected.store(true, std::memory_order_release);
-                                    const DeviceStatus status{*parameters};
-                                    std::unique_lock<LockType> guard{callbackLock, std::adopt_lock};
-                                    for (auto &callback : callbacks)
-                                        callback(status);
-                                } else {
-                                    std::clog << "Could not get the status from the device. "
-                                                 "Delaying next request ..." << std::endl;
-                                    isConnected.store(false, std::memory_order_release);
-                                }
-                                return !isConnected.load(std::memory_order_acquire) &&
-                                       !interruptFlag.load(std::memory_order_acquire);
-                            });
-
-                    if (interruptFlag.load(std::memory_order_acquire))
-                        break;
-                    std::unique_lock<LockType> interruptGuard{interruptCvLock, std::adopt_lock};
-                    cv.wait_for(interruptGuard, lowSleepPeriod, [this]() -> bool {
-                        return interruptFlag.load(std::memory_order_acquire);
-                    });
-                }
-            });
+            statusWatcherTaskFuture = std::async(std::launch::async, &StatusWatcher::statusWatcherTask, this);
         }
 
         /**
@@ -346,11 +307,45 @@ namespace Device {
             return isConnected.load(std::memory_order_acquire);
         }
 
+        void statusWatcherTask() {
+            const auto threadId{device->getName() + ".StatusWatcher"};
+            pthread_setname_np(pthread_self(), threadId.c_str());
+            Device::Commands::GetParametersCommand getParametersCommand{*device};
+            for (; !interruptFlag.load(std::memory_order_acquire);) {
+                auto future{getParametersCommand.asyncExecuteFuture(1s, systemStatusBuilder)};
+                if (!future) {
+                    std::clog << "StatusWatcher::" << device->getName()
+                              << "::Could not request to get parameters from the device." << std::endl;
+                } else {
+                    future->wait();
+                    auto result{future->get()};
+                    const auto requestResult{result.first};
+                    const auto hasSucceed{requestResult == AsyncRequestResult::SUCCESS};
+                    const auto values{result.second};
+                    if (hasSucceed && values) {
+                        isConnected.store(true, std::memory_order_release);
+                        const DeviceStatus status{*values};
+                        std::unique_lock<LockType> guard{callbackLock, std::adopt_lock};
+                        for (auto &callback : callbacks)
+                            std::invoke(callback, status);
+                    } else {
+                        std::clog << "StatusWatcher::" << device->getName() << "::Could not get the status "
+                                  << "from the device (" << asyncResultToString(requestResult) << ")." << std::endl;
+                        isConnected.store(false, std::memory_order_release);
+                    }
+                }
+                std::unique_lock<LockType> interruptGuard{interruptCvLock, std::adopt_lock};
+                cv.wait_for(interruptGuard, period, [this]() -> bool {
+                    return interruptFlag.load(std::memory_order_acquire);
+                });
+            }
+        }
+
         /**
          *
          * @param callback
          */
-        inline void addCallback(OnStatusAvailableCallback callback) {
+        [[maybe_unused]] inline void addCallback(OnStatusAvailableCallback callback) {
             std::unique_lock<LockType> guard{callbackLock, std::adopt_lock};
             callbacks.push_back(std::move(callback));
         }
@@ -365,31 +360,31 @@ namespace Device {
                     interruptFlag.store(true, std::memory_order_release);
                     cv.notify_one();
                 }
-                statusWatcherTask.wait();
+                statusWatcherTaskFuture.wait();
             }
         }
 
     private:
         std::shared_ptr<R2000> device{nullptr};
-        std::future<void> statusWatcherTask{};
+        std::future<void> statusWatcherTaskFuture{};
         Cv cv{};
         LockType interruptCvLock{};
         LockType callbackLock{};
         std::atomic_bool interruptFlag{false};
-        Duration lowSleepPeriod;
-        Duration highSleepPeriod;
+        Duration period{};
         std::vector<OnStatusAvailableCallback> callbacks{};
         std::atomic_bool isConnected{false};
-        const Device::ReadOnlyParameters::SystemStatus systemStatusBuilder{Device::ReadOnlyParameters::SystemStatus{}
-                                                                             .requestStatusFlags()
-                                                                             .requestLoadIndication()
-                                                                             .requestSystemTimeRaw()
-                                                                             .requestUpTime()
-                                                                             .requestPowerCycles()
-                                                                             .requestOperationTime()
-                                                                             .requestOperationTimeScaled()
-                                                                             .requestCurrentTemperature()
-                                                                             .requestMinimalTemperature()
-                                                                             .requestMaximalTemperature()};
+        const Parameters::ReadOnlyParameters::SystemStatus systemStatusBuilder{
+                Parameters::ReadOnlyParameters::SystemStatus{}
+                        .requestStatusFlags()
+                        .requestLoadIndication()
+                        .requestSystemTimeRaw()
+                        .requestUpTime()
+                        .requestPowerCycles()
+                        .requestOperationTime()
+                        .requestOperationTimeScaled()
+                        .requestCurrentTemperature()
+                        .requestMinimalTemperature()
+                        .requestMaximalTemperature()};
     };
 }
