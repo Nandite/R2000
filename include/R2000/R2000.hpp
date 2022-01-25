@@ -21,17 +21,35 @@ using namespace std::chrono_literals;
 
 namespace Device {
     namespace internals {
+        /**
+         * RAII wrapper over a socket that shut it down and close it on destruction.
+         * This wrapper only support Boost sockets.
+         * @tparam Socket The Type of socket to wrap.
+         */
         template<typename Socket>
         class SocketGuard {
         public:
+            /**
+             *
+             * @tparam Args Type of the argument pack of the socket constructor.
+             * @param args Arguments of the socket constructor.
+             */
             template<typename... Args>
             explicit SocketGuard(Args &&... args) : socket(std::forward<Args>(args)...) {}
 
-            ~SocketGuard() { socket.close(); }
-
+            /**
+             * @return Get the guarded socket.
+             */
             inline Socket &operator*() { return socket; }
 
-            inline Socket &getUnderlyingSocket() { return (*this).operator*(); }
+            /**
+             * Shutdown and close the socket on destruction of this instance.
+             */
+            ~SocketGuard() {
+                boost::system::error_code placeholder{};
+                socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, placeholder);
+                socket.close(placeholder);
+            }
 
         private:
             Socket socket;
@@ -39,7 +57,13 @@ namespace Device {
     } // namespace internals
     using PropertyTree = boost::property_tree::ptree;
 
-    struct DeviceConfiguration {
+    class DeviceConfiguration {
+    public:
+        /**
+         * @param name The name of the device.
+         * @param deviceAddress The ipv4 device address.
+         * @param port The Http port of the device.
+         */
         [[maybe_unused]] DeviceConfiguration(std::string name, const std::string &deviceAddress,
                                              unsigned short port = 80)
                 : name(std::move(name)),
@@ -47,17 +71,26 @@ namespace Device {
                   httpServicePort(port) {
         }
 
+    public:
         std::string name;
         const boost::asio::ip::address deviceAddress{};
         const unsigned short httpServicePort{};
     };
 
+    /**
+     * Result of an asynchronous request.
+     */
     enum class AsyncRequestResult {
         SUCCESS,
         FAILED,
         TIMEOUT
     };
 
+    /**
+     * Convert a AsyncRequestResult to a string.
+     * @param result The AsyncRequestResult to convert.
+     * @return The AsyncRequestResult as a string.
+     */
     inline std::string asyncResultToString(AsyncRequestResult result) {
         switch (result) {
             case AsyncRequestResult::SUCCESS:
@@ -70,19 +103,42 @@ namespace Device {
         return "unknown";
     }
 
-    struct AsyncResult {
+    class AsyncResult {
     public:
+        /**
+         * @param result The result of the asynchronous request.
+         * @param tree The property tree obtained after the asynchronous HTTP request.
+         */
         AsyncResult(AsyncRequestResult result, const PropertyTree &tree) : requestResult(result), propertyTree(tree) {}
 
-    public:
+        /**
+         * Test either or not the asynchronous has succeed.
+         * @return True if the request has yielded a SUCCESS value.
+         */
         inline explicit operator bool() const { return requestResult == AsyncRequestResult::SUCCESS; }
 
+        /**
+         * Compare this instance with a AsyncRequestResult value.
+         * @param rhs The AsyncRequestResult to test against.
+         * @return True if the AsyncRequestResult stored by this instance is equals to the parameter rhs.
+         */
         inline bool operator==(const AsyncRequestResult &rhs) const { return requestResult == rhs; }
 
+        /**
+         * Compare this instance with a AsyncRequestResult value.
+         * @param rhs The AsyncRequestResult to test against.
+         * @return True if the AsyncRequestResult stored by this instance is different to the parameter rhs.
+         */
         inline bool operator!=(const AsyncRequestResult &rhs) const { return !(rhs == (*this).requestResult); }
 
+        /**
+         * @return the property tree obtained after the HTTP request.
+         */
         [[nodiscard]] inline const PropertyTree &getPropertyTree() const { return propertyTree; }
 
+        /**
+         * @return Get the AsyncRequestResult of the HTTP request.
+         */
         [[nodiscard]] inline AsyncRequestResult getRequestResult() const { return requestResult; }
 
     private:
@@ -93,7 +149,6 @@ namespace Device {
     class R2000 {
     public:
         using AsyncCommandCallback = std::function<void(const AsyncResult &)>;
-
     private:
         using HttpResult = std::tuple<int, std::string, std::string>;
         using HttpGetCallback = std::function<void(const HttpResult &)>;
@@ -104,6 +159,12 @@ namespace Device {
          */
         explicit R2000(DeviceConfiguration configuration);
 
+        /**
+         * Enable this class to be built through the make_shared method.
+         * @tparam Arg Type of the argument pack of the class constructor.
+         * @param arg Argument pack of the class constructor.
+         * @return A shared_ptr of this class.
+         */
         template<typename... Arg>
         std::shared_ptr<R2000> static enableMakeShared(Arg &&... arg) {
             struct EnableMakeShared : public R2000 {
@@ -224,12 +285,13 @@ namespace Device {
          * @param endpoints The endpoints to try to connect the socket to.
          * @param timeout The timeout of the socket connection before being cancelled.
          */
-        void handleEndpointResolution(const boost::system::error_code &error, const std::string &request,
-                                      HttpGetCallback callable, boost::asio::ip::tcp::resolver::results_type &endpoints,
-                                      std::chrono::milliseconds timeout);
+        void onEndpointResolutionAttemptCompleted(const boost::system::error_code &error, const std::string &request,
+                                                  HttpGetCallback callable,
+                                                  boost::asio::ip::tcp::resolver::results_type &endpoints,
+                                                  std::chrono::milliseconds timeout);
 
         /**
-         *
+         * Execute the io service run function until this instance is destroyed.
          */
         void ioServiceTask();
 
@@ -239,8 +301,8 @@ namespace Device {
          * @param request The http request to send if the resolution has succeeded.
          * @param callable The http callback to execute once the http request is sent.
          */
-        void handleSocketConnection(const boost::system::error_code &error, const std::string &request,
-                                    const HttpGetCallback &callable);
+        void onSocketConnectionAttemptCompleted(const boost::system::error_code &error, const std::string &request,
+                                                const HttpGetCallback &callable);
 
         /**
          * Verify if the sensor does not generate an error.
@@ -253,25 +315,25 @@ namespace Device {
          * Handle the asynchronous endpoints resolver deadline.
          * @param error Error encountered while waiting for the deadline of the resolver.
          */
-        void handleAsyncResolverDeadline(const boost::system::error_code &error);
+        void onEndpointResolutionDeadlineReached();
 
         /**
          * Handle the asynchronous socket connection deadline.
          * @param error Error encountered while waiting for the socket to connect.
          */
-        void handleAsyncSocketDeadline(const boost::system::error_code &error);
+        void onSocketConnectionDeadlineReached();
 
         /**
          * Schedule a timeout deadline for the asynchronous resolver.
          * @param timeout Maximum time allowed for the resolver to complete before cancelling the operation.
          */
-        void scheduleResolverDeadline(std::chrono::milliseconds timeout);
+        void scheduleEndpointResolverNextDeadline(std::chrono::milliseconds timeout);
 
         /**
          * Schedule a timeout deadline for the asynchronous socket connection.
          * @param timeout Maximum time allowed for the socket to connect before cancelling the operation.
          */
-        void scheduleSocketConnectionDeadline(std::chrono::milliseconds timeout);
+        void scheduleSocketConnectionNextDeadline(std::chrono::milliseconds timeout);
 
     private:
         DeviceConfiguration configuration;
@@ -285,6 +347,6 @@ namespace Device {
         std::condition_variable ioServiceTaskCv{};
         std::mutex ioServiceLock{};
         std::atomic_bool interruptIoServiceTask{false};
-        Worker worker{10};
+        Worker worker{1};
     };
 } // namespace Device

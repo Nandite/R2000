@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
+#include <system_error>
+#include "R2000/NotImplementedException.hpp"
 
 namespace Device::Data {
     /**
@@ -19,41 +21,44 @@ namespace Device::Data {
      * @return The value of the enum given its type.
      */
     template<typename E>
-    constexpr auto underlyingType(E enumerator) {
+    constexpr auto underlyingType(E enumerator) noexcept {
         return static_cast<std::underlying_type_t<E>>(enumerator);
     }
 
     namespace internals {
         /**
-         *
-         * @tparam T
-         * @tparam Advance
+         * Helper struct that interpret a range byte as a type T.
+         * @tparam T The type to interpret the range into.
+         * @tparam Advance True if the iterator of the range must be advanced to the next byte
+         * following the type T byte range representation.
          */
         template<typename T, bool Advance>
         struct InterpretLittleEndianByteRange {
             /**
-             *
-             * @tparam Iterator
+             * Always throws a Device::NotImplemented exception.
+             * @tparam Iterator The type of iterator of the range.
              */
             template<typename Iterator>
-            [[maybe_unused]] static inline void interpret(Iterator &, T &) {};
+            [[maybe_unused]] static inline void interpret(Iterator &, T &) noexcept(false) {
+                throw Device::NotImplemented("InterpretLittleEndianByteRange<T>::Not implemented.");
+            };
         };
 
         /**
-         *
-         * @tparam Advance
+         * Specialization that interpret a little endian range of byte as a 16-bits length unsigned int.
+         * @tparam Advance True if the iterator of the range must be advanced by two bytes.
          */
         template<bool Advance>
         struct InterpretLittleEndianByteRange<std::uint16_t, Advance> {
             /**
-             *
-             * @tparam Iterator
-             * @param position
-             * @param v
+             * Interpret an iterator pointing over a little endian byte range as a 16-bits length unsigned integer.
+             * @tparam Iterator An iterator that meet the requirements of LegacyInputIterator.
+             * @param position Iterator over the byte range.
+             * @param interpretedValue The value obtained as the interpretation of the iterator.
              */
             template<typename Iterator>
-            static inline void interpret(Iterator &position, std::uint16_t &v) {
-                v = uint16_t(*position) | (uint16_t(*(position + 1)) << 8);
+            static inline void interpret(Iterator &position, std::uint16_t &interpretedValue) noexcept {
+                interpretedValue = uint16_t(*position) | (uint16_t(*(position + 1)) << 8);
                 if constexpr(Advance) {
                     constexpr auto byteSizeOf16Bits{sizeof(std::uint16_t)};
                     std::advance(position, byteSizeOf16Bits);
@@ -62,23 +67,23 @@ namespace Device::Data {
         };
 
         /**
-         *
-         * @tparam Advance
+         * Specialization that interpret a little endian range of byte as a 32-bits length unsigned int.
+         * @tparam Advance True if the iterator of the range must be advanced by four bytes.
          */
         template<bool Advance>
         struct InterpretLittleEndianByteRange<std::uint32_t, Advance> {
             /**
-             *
-             * @tparam Iterator
-             * @param position
-             * @param v
+             * Interpret an iterator pointing over a little endian byte range as a 32-bits length unsigned integer.
+             * @tparam Iterator An iterator that meet the requirements of LegacyInputIterator.
+             * @param position Iterator over the byte range.
+             * @param interpretedValue The value obtained as the interpretation of the iterator.
              */
             template<typename Iterator>
-            static inline void interpret(Iterator &position, std::uint32_t &v) {
-                v = uint32_t(*position) |
-                    (uint32_t(*(position + 1)) << 8) |
-                    (uint32_t(*(position + 2)) << 16) |
-                    (uint32_t(*(position + 3)) << 24);
+            static inline void interpret(Iterator &position, std::uint32_t &interpretedValue) noexcept {
+                interpretedValue = uint32_t(*position) |
+                                   (uint32_t(*(position + 1)) << 8) |
+                                   (uint32_t(*(position + 2)) << 16) |
+                                   (uint32_t(*(position + 3)) << 24);
                 if constexpr(Advance) {
                     constexpr auto byteSizeOf32Bits{sizeof(std::uint32_t)};
                     std::advance(position, byteSizeOf32Bits);
@@ -87,23 +92,23 @@ namespace Device::Data {
         };
 
         /**
-         *
-         * @tparam Advance
+         * Specialization that interpret a little endian range of byte as a 32-bits length signed int.
+         * @tparam Advance True if the iterator of the range must be advanced by four bytes.
          */
         template<bool Advance>
         struct InterpretLittleEndianByteRange<std::int32_t, Advance> {
             /**
-             *
-             * @tparam Iterator
-             * @param position
-             * @param v
+             * Interpret an iterator pointing over a little endian byte range as a 32-bits length signed integer.
+             * @tparam Iterator An iterator that meet the requirements of LegacyInputIterator.
+             * @param position Iterator over the byte range.
+             * @param interpretedValue The value obtained as the interpretation of the iterator.
              */
             template<typename Iterator>
-            static inline void interpret(Iterator &position, std::int32_t &v) {
-                v = int32_t(*position) |
-                    (int32_t(*(position + 1)) << 8) |
-                    (int32_t(*(position + 2)) << 16) |
-                    (int32_t(*(position + 3)) << 24);
+            static inline void interpret(Iterator &position, std::int32_t &interpretedValue) noexcept {
+                interpretedValue = int32_t(*position) |
+                                   (int32_t(*(position + 1)) << 8) |
+                                   (int32_t(*(position + 2)) << 16) |
+                                   (int32_t(*(position + 3)) << 24);
                 if constexpr(Advance) {
                     constexpr auto byteSizeOf32Bits{sizeof(std::int32_t)};
                     std::advance(position, byteSizeOf32Bits);
@@ -111,18 +116,28 @@ namespace Device::Data {
             };
         };
 
+        /**
+         * Specialization that interpret a little endian range of byte as a 64-bits length unsigned int.
+         * @tparam Advance True if the iterator of the range must be advanced by eight bytes.
+         */
         template<bool Advance>
         struct InterpretLittleEndianByteRange<std::uint64_t, Advance> {
+            /**
+             * Interpret an iterator pointing over a little endian byte range as a 64-bits length unsigned integer.
+             * @tparam Iterator An iterator that meet the requirements of LegacyInputIterator.
+             * @param position Iterator over the byte range.
+             * @param interpretedValue The value obtained as the interpretation of the iterator.
+             */
             template<typename Iterator>
-            static inline void interpret(Iterator &position, std::uint64_t &v) {
-                v = uint64_t(*position) |
-                    (uint64_t(*(position + 1)) << 8) |
-                    (uint64_t(*(position + 2)) << 16) |
-                    (uint64_t(*(position + 3)) << 24) |
-                    (uint64_t(*(position + 4)) << 32) |
-                    (uint64_t(*(position + 5)) << 40) |
-                    (uint64_t(*(position + 6)) << 48) |
-                    (uint64_t(*(position + 7)) << 56);
+            static inline void interpret(Iterator &position, std::uint64_t &interpretedValue) noexcept {
+                interpretedValue = uint64_t(*position) |
+                                   (uint64_t(*(position + 1)) << 8) |
+                                   (uint64_t(*(position + 2)) << 16) |
+                                   (uint64_t(*(position + 3)) << 24) |
+                                   (uint64_t(*(position + 4)) << 32) |
+                                   (uint64_t(*(position + 5)) << 40) |
+                                   (uint64_t(*(position + 6)) << 48) |
+                                   (uint64_t(*(position + 7)) << 56);
                 if constexpr(Advance) {
                     constexpr auto byteSizeOf64Bits{sizeof(std::uint64_t)};
                     std::advance(position, byteSizeOf64Bits);
@@ -133,13 +148,14 @@ namespace Device::Data {
 
     struct Header {
         /**
-         *
-         * @tparam Iterator
-         * @param begin
-         * @return
+         * Construct a header by interpreting a little endian byte range given an input iterator.
+         * @tparam Iterator The type of the iterator over the range. It must meet the requirements
+         * of LegacyInputIterator.
+         * @param begin The starting position of the byte range.
+         * @return A Header constructed from the byte range.
          */
         template<typename Iterator>
-        static Header fromByteRange(Iterator begin) {
+        static Header fromByteRange(Iterator begin) noexcept {
             Data::Header header{};
             internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(begin, header.magic);
             internals::InterpretLittleEndianByteRange<uint16_t, true>::interpret(begin, header.packetType);
@@ -207,14 +223,17 @@ namespace Device::Data {
 
     class Scan {
     public:
+        /**
+         * Construct a default scan with empty distances and amplitudes and no timestamp.
+         */
         Scan() = default;
 
         /**
-         *
-         * @param distances
-         * @param amplitudes
-         * @param headers
-         * @param timestamp
+         * Construct a new scan given a distances, amplitudes vectors, headers and timestamp.
+         * @param distances The distances values of the scan.
+         * @param amplitudes The amplitudes values of the scan.
+         * @param headers The headers of the scan.
+         * @param timestamp The timestamp  of the scan.
          */
         Scan(std::vector<std::uint32_t> distances, std::vector<std::uint32_t> amplitudes,
              std::vector<Header> headers,
@@ -224,40 +243,37 @@ namespace Device::Data {
                                                                        timestamp(timestamp) {}
 
         /**
-         *
-         * @return
+         * @return The distances vector of the scan.
          */
-        [[maybe_unused]] [[nodiscard]] const std::vector<std::uint32_t> &getDistances() const { return distances; }
+        [[maybe_unused]] [[nodiscard]] inline const std::vector<std::uint32_t> &
+        getDistances() const noexcept { return distances; }
 
         /**
-         *
-         * @return
+         * @return The amplitudes vector of the scan.
          */
-        [[maybe_unused]] [[nodiscard]] const std::vector<std::uint32_t> &getAmplitudes() const { return amplitudes; }
+        [[maybe_unused]] [[nodiscard]] inline const std::vector<std::uint32_t> &
+        getAmplitudes() const noexcept { return amplitudes; }
 
         /**
-         *
-         * @return
+         * @return The headers of each packet of the scan.
          */
-        [[maybe_unused]] [[nodiscard]] const std::vector<Header> &getHeaders() const { return headers; }
+        [[maybe_unused]] [[nodiscard]] inline const std::vector<Header> &getHeaders() const noexcept { return headers; }
 
         /**
-         *
-         * @return
+         * @return The timestamp of the scan.
          */
-        [[maybe_unused]] [[nodiscard]] const auto &getTimestamp() const { return timestamp; }
+        [[maybe_unused]] [[nodiscard]] inline const auto &getTimestamp() const noexcept { return timestamp; }
 
         /**
-         *
-         * @return
+         * @return True if the scan is empty, False otherwise.
          */
-        [[maybe_unused]] [[nodiscard]] inline bool empty() const { return headers.empty(); }
+        [[maybe_unused]] [[nodiscard]] inline bool empty() const noexcept { return headers.empty(); }
 
         /**
-         *
-         * @return
+         * @return True if the scan is complete, False otherwise. A scan is complete if the number of points
+         * specified by the first header is equals to the size of the distances vector.
          */
-        [[maybe_unused]] [[nodiscard]] inline bool isComplete() const {
+        [[maybe_unused]] [[nodiscard]] inline bool isComplete() const noexcept {
             return !empty() && distances.size() >= headers[0].numPointsScan;
         }
 

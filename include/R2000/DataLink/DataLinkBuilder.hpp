@@ -6,14 +6,10 @@
 
 #pragma once
 
-#include "R2000/Control/DeviceHandle.hpp"
-#include "R2000/Control/Parameters.hpp"
-#include "R2000/R2000.hpp"
-#include "TCPLink.hpp"
-#include "UDPLink.hpp"
 #include <R2000/Control/Commands.hpp>
 #include <any>
 #include <chrono>
+#include <future>
 #include <utility>
 
 using namespace std::chrono_literals;
@@ -22,21 +18,31 @@ namespace Device {
     class builder_exception : public std::invalid_argument {
     public:
         explicit builder_exception(const std::string &what) : std::invalid_argument(what) {};
-        builder_exception(const builder_exception &) = default;
-        builder_exception &operator=(const builder_exception &) = default;
-        builder_exception(builder_exception &&) = default;
-        builder_exception &operator=(builder_exception &&) = default;
-        ~builder_exception() noexcept override = default;
     };
     namespace internals {
+        /**
+         * Helper class to map different parameters inside a map with a Key type.
+         * @tparam KeyType The type of key to use for the underlying map.
+         */
         template<typename KeyType>
         class Requirements {
         public:
+            /**
+             * Put a new element into the map.
+             * @tparam ValueType The type of the value to put.
+             * @param key The key of the value.
+             * @param value The value to put inside the map.
+             */
             template<typename ValueType>
             void put(KeyType key, ValueType &&value) {
                 requirements[key] = std::any(std::forward<ValueType>(value));
             }
 
+            /**
+             * Get a value stored inside the map as an any.
+             * @param key The key of the value.
+             * @return an any containing the value is found, empty otherwise.
+             */
             std::any get(KeyType key) {
                 if (requirements.count(key))
                     return requirements.at(key);
@@ -47,22 +53,45 @@ namespace Device {
             std::unordered_map<KeyType, std::any> requirements{};
         };
 
+        /**
+         * Cast an any to a value if not empty, otherwise throws an exception with a custom message.
+         * @tparam T The type to cast the any into.
+         * @param any The any to cast.
+         * @param throwMessage The message to throw if the any is empty.
+         * @return The casted value.
+         */
         template<typename T>
-        auto castAnyOrThrow(const std::any &any, const std::string &throw_message) noexcept(false) {
+        inline auto castAnyOrThrow(const std::any &any, const std::string &throwMessage) noexcept(false) {
             if (!any.has_value())
-                throw builder_exception(std::string(__func__) + " : Any is empty -> " + throw_message);
+                throw builder_exception(std::string(__func__) + ":: Any is empty -> " + throwMessage);
             return std::any_cast<T>(any);
         }
 
-        auto findValueOrThrow(const Parameters::ParametersMap &map, const std::string &key,
-                              const std::string &throw_message) noexcept(false) {
+        /**
+         * Find a value inside a map or throws an exception with a custom message.
+         * @param map The map to search into.
+         * @param key The key of the value to get.
+         * @param throwMessage The message to throw if the key is not found.
+         * @return The found value.
+         */
+        inline auto findValueOrThrow(const Parameters::ParametersMap &map, const std::string &key,
+                                     const std::string &throwMessage) noexcept(false)
+        -> const Parameters::ParametersMap::mapped_type & {
             if (!map.count(key))
-                throw builder_exception(std::string(__func__) + " : Key not found -> " + throw_message);
+                throw builder_exception(std::string(__func__) + " : Key not found -> " + throwMessage);
             return map.at(key);
         }
 
-        std::string find_value_or_default(const Parameters::ParametersMap &map, const std::string &key,
-                                          const std::string &defaultValue) noexcept(false) {
+        /**
+         * Find a value inside a map or return a default value.
+         * @param map The map to search into.
+         * @param key The key of the value to get.
+         * @param defaultValue The default fallback value if the key is not found.
+         * @return The found value or the default one.
+         */
+        inline auto findValueOrDefault(const Parameters::ParametersMap &map, const std::string &key,
+                                       const std::string &defaultValue) noexcept(false)
+        -> const Parameters::ParametersMap::mapped_type & {
             if (!map.count(key))
                 return defaultValue;
             return map.at(key);
@@ -70,184 +99,129 @@ namespace Device {
 
     } // namespace internals
 
+    class R2000;
+    class DataLink;
+    class DeviceHandle;
+    enum class AsyncRequestResult;
+
     class DataLinkBuilder {
     private:
         using WatchdogConfiguration = std::pair<bool, std::chrono::milliseconds>;
+    public:
         using AsyncBuildResult = std::pair<AsyncRequestResult, std::shared_ptr<DataLink>>;
 
     public:
         /**
-         *
-         * @param builder
+         * Construct a new DataLinkBuilder geared to build a TCPLink.
+         * @param builder configuration of the TCPLink data stream.
          */
-        explicit DataLinkBuilder(const Parameters::ReadWriteParameters::TcpHandle &builder) {
-            requirements.put("protocol", Device::PROTOCOL::TCP);
-            requirements.put("handleBuilder", builder);
-        }
+        explicit DataLinkBuilder(const Parameters::ReadWriteParameters::TcpHandle &builder);
 
         /**
-         *
-         * @param builder
+         * Construct a new DataLinkBuilder geared to build a UDPLink.
+         * @param builder configuration of the UDPLink data stream.
          */
-        explicit DataLinkBuilder(const Parameters::ReadWriteParameters::UdpHandle &builder) {
-            requirements.put("protocol", Device::PROTOCOL::UDP);
-            requirements.put("handleBuilder", builder);
-        }
+        explicit DataLinkBuilder(const Parameters::ReadWriteParameters::UdpHandle &builder);
 
         /**
-         *
-         * @param device
-         * @return
+         * Construct a new DataLink for a device using the stored configuration. Be careful, this method will
+         * block if the device cannot be joined over the network until it fails and return. The length of the
+         * blocking depends on the underlying OS socket configuration.
+         * @param device The device to build the link with.
+         * @return A shared pointer containing the built DataLink or nullptr if an error has occurred.
          */
-        std::shared_ptr<DataLink> build(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
-            return syncBuildAndPotentiallyThrow(device);
-        }
+        std::shared_ptr<DataLink> build(const std::shared_ptr<Device::R2000> &device) noexcept(false);
 
+        /**
+         * Asynchronously construct a new DataLink for a device using the stored configuration. The method returns a
+         * future upon which the client can wait for the DataLink to be build. A timeout can be provided so that the
+         * built is aborted if the device cannot be joined over the network.
+         * @param device The device to build the link with.
+         * @param timeout Maximum time allowed for the build to takes place.
+         * @return a future of pair containing the result of the build request and if successful and the
+         * built DataLink. If the request has failed, the DataLink evaluates to nullptr.
+         */
         std::future<AsyncBuildResult> build(const std::shared_ptr<Device::R2000> &device,
-                                            std::chrono::milliseconds timeout) noexcept(false) {
-            return asyncBuildAndPotentiallyThrow(device, timeout);
-        }
+                                            std::chrono::milliseconds timeout) noexcept(false);
 
     private:
         /**
-         *
-         * @param map
-         * @return
+         * Extract the watchdog parameters from a parameters map.
+         * @param map The parameters map to search the watchdog data in.
+         * @return a pair containing:
+         * - A flag at true if the watchdog is enabled, False otherwise (False also if the watchdog parameters is not
+         * found within the map).
+         * - The timeout of the watchdog (defaulted to 1 minute).
          */
         [[nodiscard]] static std::pair<bool, std::chrono::milliseconds>
-        extractWatchdogParameters(const Parameters::ParametersMap &map) {
-            const auto watchdogEnabled{internals::find_value_or_default(map, PARAMETER_HANDLE_WATCHDOG,
-                                                                        BOOL_PARAMETER_FALSE) == BOOL_PARAMETER_TRUE};
-            const auto watchdogTimeout{
-                    watchdogEnabled ? std::stoi(internals::findValueOrThrow(map, PARAMETER_HANDLE_WATCHDOG_TIMEOUT, ""))
-                                    : 60000};
-            return {watchdogEnabled, std::chrono::milliseconds(watchdogTimeout)};
-        }
+        extractWatchdogParameters(const Parameters::ParametersMap &map);
 
         /**
-         *
-         * @tparam T
-         * @param requirements
-         * @return
+         * Extract the TCP Handle and watchdog configuration parameters from a map of requirements.
+         * @param requirements The map of requirements to search in.
+         * @return A pair of:
+         * - The TCP handle parameters.
+         * - The watchdog configuration.
          */
         static std::pair<Parameters::ReadWriteParameters::TcpHandle, WatchdogConfiguration>
-        extractTcpDataLinkParameters(internals::Requirements<std::string> &requirements) noexcept(false) {
-            auto handleBuilder{internals::castAnyOrThrow<Parameters::ReadWriteParameters::TcpHandle>(
-                    requirements.get("handleBuilder"), "")};
-            auto handleParameters{handleBuilder.build()};
-            auto watchdog{extractWatchdogParameters(handleParameters)};
-            return {std::move(handleBuilder), std::move(watchdog)};
-        };
-
-        static std::tuple<Parameters::ReadWriteParameters::UdpHandle, WatchdogConfiguration, unsigned int>
-        extractUdpDataLinkParameters(internals::Requirements<std::string> &requirements) noexcept(false) {
-            auto handleBuilder{internals::castAnyOrThrow<Parameters::ReadWriteParameters::UdpHandle>(
-                    requirements.get("handleBuilder"), "")};
-            auto handleParameters{handleBuilder.build()};
-            auto watchdog{extractWatchdogParameters(handleParameters)};
-            const auto port{std::stoi(internals::findValueOrThrow(handleParameters, PARAMETER_HANDLE_PORT,
-                                                                  "Could not find the port parameter."))};
-            return {std::move(handleBuilder), std::move(watchdog), port};
-        };
-
-        static std::shared_ptr<DeviceHandle>
-        makeTcpDeviceHandle(const Commands::RequestTcpHandleCommand::ResultType &from,
-                            WatchdogConfiguration watchdog) {
-            const auto &deviceAnswer{from.value()};
-            const auto &handle{deviceAnswer.second};
-            const auto port{deviceAnswer.first};
-            return std::make_shared<DeviceHandle>(handle, watchdog.first, watchdog.second, port);
-        }
-
-        static std::shared_ptr<DeviceHandle>
-        makeUdpDeviceHandle(const Commands::RequestUdpHandleCommand::ResultType &from,
-                            WatchdogConfiguration watchdog, unsigned int port) {
-            const auto &deviceAnswer{from.value()};
-            const auto &handle{deviceAnswer};
-            return std::make_shared<DeviceHandle>(handle, watchdog.first, watchdog.second, port);
-        }
+        extractTcpDataLinkParameters(internals::Requirements<std::string> &requirements) noexcept(false);
 
         /**
-         *
-         * @param device
-         * @return
+         * Extract the UDP Handle, watchdog configuration, and the address and port parameters
+         * from a map of requirements.
+         * @param requirements The map of requirements to search in.
+         * @return A tuple of of:
+         * - The UDP handle parameters.
+         * - The watchdog configuration.
+         * - The address at which the data stream is sent.
+         * - The port at which the data stream is sent.
+         */
+        static std::tuple<Parameters::ReadWriteParameters::UdpHandle, WatchdogConfiguration, boost::asio::ip::address,
+                unsigned int>
+        extractUdpDataLinkParameters(internals::Requirements<std::string> &requirements) noexcept(false);
+
+        /**
+         * Make a DeviceHandle given a result from the request of a TCP handle to the device.
+         * @param commandResult The result of the request handle command.
+         * @param address The address of the device.
+         * @param watchdog The watchdog configuration.
+         * @return A shared pointer containing a DeviceHandle.
+         */
+        static std::shared_ptr<DeviceHandle>
+        makeTcpDeviceHandle(const Commands::RequestTcpHandleCommand::ResultType &commandResult,
+                            const boost::asio::ip::address &address,
+                            WatchdogConfiguration watchdog) noexcept;
+
+        /**
+         * Make a DeviceHandle given a result from the request of a UDP handle to the device.
+         * @param commandResult The result of the request handle command.
+         * @param address The address at which the data is sent.
+         * @param port The port at which the data is sent.
+         * @param watchdog The watchdog configuration.
+         * @return A shared pointer containing a DeviceHandle.
+         */
+        static std::shared_ptr<DeviceHandle>
+        makeUdpDeviceHandle(const Commands::RequestUdpHandleCommand::ResultType &commandResult,
+                            const boost::asio::ip::address &address, unsigned int port,
+                            WatchdogConfiguration watchdog) noexcept;
+
+        /**
+         * Synchronously request a data stream to the device and construct a DataLink to handle it.
+         * @param device The device to make the link with.
+         * @return A shared pointer containing the DataLink or nullptr if the link could not be established.
          */
         std::shared_ptr<DataLink>
-        syncBuildAndPotentiallyThrow(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
-            const auto protocol{internals::castAnyOrThrow<Device::PROTOCOL>(requirements.get("protocol"), "")};
-            switch (protocol) {
-                case PROTOCOL::TCP: {
-                    const auto params{extractTcpDataLinkParameters(requirements)};
-                    auto command{Device::Commands::RequestTcpHandleCommand{*device}};
-                    const auto result{command.execute(params.first)};
-                    if (!result)
-                        return {nullptr};
-                    return std::make_shared<TCPLink>(device, makeTcpDeviceHandle(*result, params.second));
-                }
-                case PROTOCOL::UDP: {
-                    const auto params{extractUdpDataLinkParameters(requirements)};
-                    const auto &builder{std::get<0>(params)};
-                    const auto &watchdog{std::get<1>(params)};
-                    const auto &port{std::get<2>(params)};
-                    auto command{Device::Commands::RequestUdpHandleCommand{*device}};
-                    const auto result{command.execute(builder)};
-                    if (!result)
-                        return {nullptr};
-                    return std::make_shared<UDPLink>(device, makeUdpDeviceHandle(*result, watchdog, port));
-                }
-            }
-            return {nullptr};
-        }
+        syncBuildAndPotentiallyThrow(const std::shared_ptr<Device::R2000> &device) noexcept(false);
 
+        /**
+         * Asynchronously request a data stream to the device and construct a DataLink to handle it.
+         * @param device The device to make the link with.
+         * @param timeout The maximum time allowed for the device to be joined and the DataLink constructed.
+         * @return a future that contains the result of the request and a DataLink (or nullptr if the link could not
+         * be established).
+         */
         std::future<AsyncBuildResult> asyncBuildAndPotentiallyThrow(const std::shared_ptr<Device::R2000> &device,
-                                                                    std::chrono::milliseconds timeout) noexcept(true) {
-            auto promise{std::make_shared<std::promise<AsyncBuildResult>>()};
-            const auto protocol{internals::castAnyOrThrow<Device::PROTOCOL>(requirements.get("protocol"), "")};
-            switch (protocol) {
-                case PROTOCOL::TCP: {
-                    const auto params{extractTcpDataLinkParameters(requirements)};
-                    const auto launched{Device::Commands::RequestTcpHandleCommand{*device}.asyncExecute(
-                            params.first, timeout,
-                            [promise, params, &device](
-                                    const Commands::RequestTcpHandleCommand::AsyncResultType &result) -> void {
-                                const auto error{result.first};
-                                if (error != AsyncRequestResult::SUCCESS) {
-                                    promise->set_value(AsyncBuildResult{error, nullptr});
-                                    return;
-                                }
-                                promise->set_value(AsyncBuildResult{
-                                        error, std::make_shared<TCPLink>(device, makeTcpDeviceHandle(result.second,
-                                                                                                     params.second))});
-                            })};
-                    if (!launched)
-                        promise->set_value(AsyncBuildResult{AsyncRequestResult::FAILED, nullptr});
-                    break;
-                }
-                case PROTOCOL::UDP:
-                    const auto params{extractUdpDataLinkParameters(requirements)};
-                    const auto &builder{std::get<0>(params)};
-                    const auto launched{Device::Commands::RequestUdpHandleCommand{*device}.asyncExecute(
-                            builder, timeout,
-                            [promise, params, &device](
-                                    const Commands::RequestUdpHandleCommand::AsyncResultType &result) {
-                                const auto error{result.first};
-                                if (error != AsyncRequestResult::SUCCESS) {
-                                    promise->set_value(AsyncBuildResult{error, nullptr});
-                                    return;
-                                }
-                                const auto &watchdog{std::get<1>(params)};
-                                const auto &port{std::get<2>(params)};
-                                promise->set_value(AsyncBuildResult{
-                                        error, std::make_shared<UDPLink>(device,
-                                                                         makeUdpDeviceHandle(result.second, watchdog,
-                                                                                             port))});
-                            })};
-                    if (!launched)
-                        promise->set_value(AsyncBuildResult{AsyncRequestResult::FAILED, nullptr});
-                    break;
-            }
-            return promise->get_future();
-        }
+                                                                    std::chrono::milliseconds timeout) noexcept(true);
 
     private:
         internals::Requirements<std::string> requirements{};

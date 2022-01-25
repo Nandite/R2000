@@ -16,8 +16,8 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<Devic
             [&](const Commands::StartScanCommand::AsyncResultType &result) -> void {
                 if (result == AsyncRequestResult::SUCCESS) {
                     isConnected.store(true, std::memory_order_release);
-                    if (deviceHandle->watchdogEnabled) {
-                        watchdogTaskFuture = spawnAsync(&DataLink::watchdogTask, this, 1s);
+                    if (deviceHandle->isWatchdogEnabled()) {
+                        watchdogTaskFuture = std::async(std::launch::async, &DataLink::watchdogTask, this, 1s);
                     }
                 } else {
                     std::clog << "DataLink::Could not request the device to start the stream ("
@@ -34,7 +34,7 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<Devic
 Device::DataLink::~DataLink() {
     if (!interruptFlag.load(std::memory_order_acquire)) {
         {
-            std::unique_lock<LockType> guard(interruptCvLock, std::adopt_lock);
+            std::unique_lock<LockType> guard{interruptCvLock, std::adopt_lock};
             interruptFlag.store(true, std::memory_order_release);
             interruptCv.notify_one();
         }
@@ -61,23 +61,26 @@ Device::DataLink::~DataLink() {
     }
 }
 
-bool Device::DataLink::isAlive() const {
+bool Device::DataLink::isAlive() const noexcept {
     return isConnected.load(std::memory_order_acquire);
 }
 
-void Device::DataLink::watchdogTask(std::chrono::seconds timeout) {
-    pthread_setname_np(pthread_self(), "Device-Watchdog");
+void Device::DataLink::watchdogTask(std::chrono::seconds period) {
+    const auto threadName{device->getName() + ".Watchdog"};
+    pthread_setname_np(pthread_self(), threadName.c_str());
     Device::Commands::FeedWatchdogCommand feedWatchdogCommand{*device};
+    const auto watchdogTimeout{deviceHandle->getWatchdogTimeout()};
     for (; !interruptFlag.load(std::memory_order_acquire);) {
-        auto future{feedWatchdogCommand.asyncExecute(*deviceHandle, timeout)};
-        if (!future)
+        auto future{feedWatchdogCommand.asyncExecute(*deviceHandle, period)};
+        if (!future) {
             isConnected.store(false, std::memory_order_release);
+        }
         future->wait();
         auto result{future->get()};
         const auto hasSucceed{result == AsyncRequestResult::SUCCESS};
         isConnected.store(hasSucceed, std::memory_order_release);
-        std::unique_lock<LockType> guard(interruptCvLock, std::adopt_lock);
-        interruptCv.wait_for(guard, deviceHandle->watchdogTimeout,
+        std::unique_lock<LockType> guard{interruptCvLock, std::adopt_lock};
+        interruptCv.wait_for(guard, watchdogTimeout,
                              [this]() -> bool { return interruptFlag.load(std::memory_order_acquire); });
     }
 }

@@ -23,8 +23,8 @@ Device::TCPLink::TCPLink(std::shared_ptr<R2000> iDevice,
 }
 
 void Device::TCPLink::asynchronousResolveEndpoints() {
-    const auto hostname{device->getHostname()};
-    const auto port{deviceHandle->port};
+    const auto hostname{deviceHandle->getAddress()};
+    const auto port{deviceHandle->getPort()};
     boost::asio::ip::tcp::resolver::query query{hostname.to_string(), std::to_string(port)};
     resolver.async_resolve(query, [this](const auto &error, auto queriedEndpoints) {
         if (!error) {
@@ -44,8 +44,8 @@ void Device::TCPLink::asynchronousResolveEndpoints() {
     });
 }
 
-void Device::TCPLink::handleSocketConnection(boost::system::error_code error,
-                                             const boost::asio::ip::tcp::resolver::iterator &endpoint) {
+void Device::TCPLink::onSocketConnectionAttemptCompleted(boost::system::error_code error,
+                                                         const boost::asio::ip::tcp::resolver::iterator &endpoint) {
     if (!error) {
         std::cout << "TCPLink::Connected to the device at endpoint (" << endpoint->endpoint() << ") / and service ("
                   << endpoint->service_name() << ")" << std::endl;
@@ -54,7 +54,7 @@ void Device::TCPLink::handleSocketConnection(boost::system::error_code error,
                                 boost::asio::transfer_exactly(
                                         DEFAULT_RECEPTION_BUFFER_SIZE),
                                 [this](const auto &error, const auto byteTransferred) {
-                                    handleBytesReception(error, byteTransferred);
+                                    onBytesReceived(error, byteTransferred);
                                 });
     } else if (error || endpoint == endPoints.end()) {
         if (error == boost::asio::error::operation_aborted) {
@@ -70,8 +70,8 @@ void Device::TCPLink::handleSocketConnection(boost::system::error_code error,
     }
 }
 
-void Device::TCPLink::handleBytesReception(const boost::system::error_code &error,
-                                           const unsigned int byteTransferred) {
+void Device::TCPLink::onBytesReceived(const boost::system::error_code &error,
+                                      unsigned int byteTransferred) {
     if (error) {
         if (error != boost::asio::error::operation_aborted) {
             std::clog << "TCPLink::Network error (" << error.message() << ")" << std::endl;
@@ -89,7 +89,7 @@ void Device::TCPLink::handleBytesReception(const boost::system::error_code &erro
     boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
                             boost::asio::transfer_exactly(extractionResult.second),
                             [this](const auto &error, const auto byteTransferred) {
-                                handleBytesReception(error, byteTransferred);
+                                onBytesReceived(error, byteTransferred);
                             });
 }
 

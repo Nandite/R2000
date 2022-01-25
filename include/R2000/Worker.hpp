@@ -17,9 +17,8 @@
 class Worker {
 public:
     /**
-     *
-     * @param run
-     * @param maxJob
+     * Construct a new worker that can handle task asynchronously.
+     * @param maxJob The maximum number of job to queue for execution.
      */
     explicit Worker(const unsigned int maxJob = std::numeric_limits<unsigned int>::max())
             : maxJob(maxJob) {
@@ -27,7 +26,7 @@ public:
             for (; !interruptFlag.load(std::memory_order_acquire);) {
                 decltype(jobs) localJobQueue{};
                 {
-                    std::unique_lock<std::mutex> guard(jobLock);
+                    std::unique_lock<std::mutex> guard{jobLock, std::adopt_lock};
                     jobQueueCondition.wait(guard, [this] {
                         return !jobs.empty() || interruptFlag.load(std::memory_order_acquire);
                     });
@@ -42,10 +41,13 @@ public:
         });
     }
 
-    ~Worker() {
+    /**
+     * Interrupt and wait for the worker to finish.
+     */
+    virtual ~Worker() {
         if (!interruptFlag.load(std::memory_order_acquire)) {
             {
-                std::unique_lock<std::mutex> guard(jobLock, std::adopt_lock);
+                std::unique_lock<std::mutex> guard{jobLock, std::adopt_lock};
                 interruptFlag.store(true, std::memory_order_release);
                 jobQueueCondition.notify_one();
             }
@@ -54,9 +56,16 @@ public:
         }
     }
 
+    /**
+     * Queue a new job to execute.
+     * @tparam Args The arguments type of the job to execute.
+     * @param args The arguments of the job to execute.
+     * @return True if the job has been queued for execution, False if the
+     * maximum number of waiting job has been reached.
+     */
     template<typename... Args>
-    inline bool pushJob(Args &&... args) {
-        std::lock_guard<std::mutex> guard(jobLock);
+    inline bool pushJob(Args &&... args) noexcept {
+        std::lock_guard<std::mutex> guard{jobLock};
         if (jobs.size() <= maxJob) {
             jobs.push_back(std::bind(std::forward<Args>(args)...));
             jobQueueCondition.notify_one();

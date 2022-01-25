@@ -22,7 +22,7 @@ int main() {
     Device::Commands::RebootDeviceCommand rebootDeviceCommand{*device};
     Device::Commands::Command<Device::Commands::RebootDevice> reboot{*device};
 
-    auto future{rebootDeviceCommand.execute(5s)};
+    auto future{rebootDeviceCommand.asyncExecute(5s)};
     if (!future) {
         std::clog << "Could not issue the reboot command" << std::endl;
         return EXIT_FAILURE;

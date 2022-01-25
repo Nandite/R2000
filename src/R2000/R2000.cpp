@@ -10,7 +10,6 @@
 #include <utility>
 
 Device::R2000::R2000(Device::DeviceConfiguration configuration) : configuration(std::move(configuration)) {
-
     ioServiceTaskFuture = std::async(std::launch::async, &R2000::ioServiceTask, this);
 }
 
@@ -172,7 +171,7 @@ Device::R2000::HttpResult Device::R2000::HttpGet(const std::string &requestPath)
     auto endpointIterator{resolver.resolve(query)};
     boost::asio::ip::tcp::resolver::iterator endpointEndIterator{};
     internals::SocketGuard<boost::asio::ip::tcp::socket> socketGuard{ioService};
-    auto &socket{socketGuard.getUnderlyingSocket()};
+    auto &socket{*socketGuard};
     {
         boost::system::error_code error{boost::asio::error::host_not_found};
         for (; error && endpointIterator != endpointEndIterator;) {
@@ -193,17 +192,16 @@ bool Device::R2000::AsyncHttpGet(const std::string &request, HttpGetCallback cal
                                  std::chrono::milliseconds timeout) noexcept(true) {
     auto asyncWorkerJob{[this, request, timeout, callable = std::move(callable)]() {
         if (deviceEndpoints) {
-            handleEndpointResolution(boost::system::error_code{}, request, callable,
-                                     *deviceEndpoints, timeout);
+            onEndpointResolutionAttemptCompleted(boost::system::error_code{}, request, callable,
+                                                 *deviceEndpoints, timeout);
         } else {
             const auto query{getDeviceQuery()};
-            auto resolverHandler{
-                    [this, request, callable, timeout](const auto &error, auto queriedEndpoints) mutable {
-                        deviceEndpoints = std::move(queriedEndpoints);
-                        handleEndpointResolution(error, request, callable, *deviceEndpoints, timeout);
-                    }};
+            auto resolverHandler{[this, request, callable, timeout](const auto &error, auto queriedEndpoints) {
+                deviceEndpoints = std::move(queriedEndpoints);
+                onEndpointResolutionAttemptCompleted(error, request, callable, *deviceEndpoints, timeout);
+            }};
             asyncResolver.async_resolve(query, resolverHandler);
-            scheduleResolverDeadline(timeout);
+            scheduleEndpointResolverNextDeadline(timeout);
         }
         std::unique_lock<std::mutex> guard(ioServiceLock, std::adopt_lock);
         ioServiceTaskCv.notify_one();
@@ -211,10 +209,11 @@ bool Device::R2000::AsyncHttpGet(const std::string &request, HttpGetCallback cal
     return worker.pushJob(asyncWorkerJob);
 }
 
-void Device::R2000::handleEndpointResolution(const boost::system::error_code &error, const std::string &request,
-                                             HttpGetCallback callable,
-                                             boost::asio::ip::tcp::resolver::results_type &endpoints,
-                                             std::chrono::milliseconds timeout) {
+void
+Device::R2000::onEndpointResolutionAttemptCompleted(const boost::system::error_code &error, const std::string &request,
+                                                    HttpGetCallback callable,
+                                                    boost::asio::ip::tcp::resolver::results_type &endpoints,
+                                                    std::chrono::milliseconds timeout) {
     boost::system::error_code placeholder;
     resolverDeadline.cancel(placeholder);
     if (!error) {
@@ -223,10 +222,10 @@ void Device::R2000::handleEndpointResolution(const boost::system::error_code &er
         asyncSocket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, placeholder);
         asyncSocket.close(placeholder);
         auto socketConnectionHandler{[this, request, callable = std::move(callable)](auto error, const auto &) {
-            handleSocketConnection(error, request, callable);
+            onSocketConnectionAttemptCompleted(error, request, callable);
         }};
         boost::asio::async_connect(asyncSocket, endpointsBegin, endpointsEnd, socketConnectionHandler);
-        scheduleSocketConnectionDeadline(timeout);
+        scheduleSocketConnectionNextDeadline(timeout);
     } else {
         if (error == boost::asio::error::operation_aborted) {
             std::clog << "R2000::" << configuration.name << "::Endpoints resolution timeout" << std::endl;
@@ -238,8 +237,9 @@ void Device::R2000::handleEndpointResolution(const boost::system::error_code &er
     }
 }
 
-void Device::R2000::handleSocketConnection(const boost::system::error_code &error, const std::string &request,
-                                           const HttpGetCallback &callable) {
+void
+Device::R2000::onSocketConnectionAttemptCompleted(const boost::system::error_code &error, const std::string &request,
+                                                  const HttpGetCallback &callable) {
     boost::system::error_code placeholder;
     socketDeadline.cancel(placeholder);
     if (!error) {
@@ -263,32 +263,26 @@ bool Device::R2000::verifyErrorCode(const Device::PropertyTree &tree) {
     return (code && (*code) == 0 && text && (*text) == "success");
 }
 
-void Device::R2000::scheduleResolverDeadline(std::chrono::milliseconds timeout) {
+void Device::R2000::scheduleEndpointResolverNextDeadline(std::chrono::milliseconds timeout) {
     resolverDeadline.expires_from_now(
             boost::asio::chrono::milliseconds(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count()));
-    resolverDeadline.async_wait([this](const boost::system::error_code &error) { handleAsyncResolverDeadline(error); });
+    resolverDeadline.async_wait([this](const boost::system::error_code &) { onEndpointResolutionDeadlineReached(); });
 }
 
-void Device::R2000::scheduleSocketConnectionDeadline(std::chrono::milliseconds timeout) {
+void Device::R2000::scheduleSocketConnectionNextDeadline(std::chrono::milliseconds timeout) {
     socketDeadline.expires_from_now(
             boost::asio::chrono::milliseconds(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count()));
-    socketDeadline.async_wait([this](const boost::system::error_code &error) { handleAsyncSocketDeadline(error); });
+    socketDeadline.async_wait([this](const boost::system::error_code &) { onSocketConnectionDeadlineReached(); });
 }
 
-void Device::R2000::handleAsyncResolverDeadline(const boost::system::error_code &error) {
-    if (error == boost::asio::error::operation_aborted) {
-        std::clog << "R2000::" << configuration.name << "::Cancelling async resolver deadline" << std::endl;
-    }
+void Device::R2000::onEndpointResolutionDeadlineReached() {
     const auto expiryPoint{resolverDeadline.expiry()};
     if (expiryPoint <= boost::asio::steady_timer::clock_type::now()) {
         asyncResolver.cancel();
     }
 }
 
-void Device::R2000::handleAsyncSocketDeadline(const boost::system::error_code &error) {
-    if (error == boost::asio::error::operation_aborted) {
-        std::clog << "R2000::" << configuration.name << "::Cancelling async socket deadline" << std::endl;
-    }
+void Device::R2000::onSocketConnectionDeadlineReached() {
     const auto expiryPoint{socketDeadline.expiry()};
     if (expiryPoint <= boost::asio::steady_timer::clock_type::now()) {
         boost::system::error_code placeholder{};

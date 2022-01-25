@@ -32,6 +32,7 @@ add_definitions(${PCL_DEFINITIONS})
 ############################################################################
 
 add_executable(ScanAcquisition include
+        src/R2000/DataLink/DataLinkBuilder.cpp
         src/R2000/DataLink/DataLink.cpp
         src/R2000/DataLink/TCPLink.cpp
         src/R2000/DataLink/UDPLink.cpp
@@ -58,7 +59,7 @@ target_link_libraries(DeviceWatcher
 add_executable(AsyncCommand include
         src/R2000/R2000.cpp
         src/Backtrace.cpp
-        AsyncCommand.cpp include/R2000/Worker.hpp include/R2000/Control/Commands.hpp include/R2000/Control/Parameters.hpp)
+        AsyncCommand.cpp include/R2000/Worker.hpp include/R2000/Control/Commands.hpp include/R2000/Control/Parameters.hpp include/R2000/NotImplementedException.hpp)
 target_link_libraries(AsyncCommand
         ${CMAKE_DL_LIBS}
         ${Boost_PROGRAM_OPTIONS_LIBRARIES}

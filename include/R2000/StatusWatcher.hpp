@@ -1,10 +1,14 @@
 #pragma once
 
 #include "Control/Commands.hpp"
+#include "Farbot.hpp"
 #include "R2000.hpp"
-#include <unordered_map>
 #include <any>
 #include <bitset>
+#include <chrono>
+#include <optional>
+#include <unordered_map>
+#include "R2000/NotImplementedException.hpp"
 
 #define PARAMETER_STATUS_FLAGS "status_flags"
 #define PARAMETER_STATUS_LOAD_INDICATION "load_indication"
@@ -18,332 +22,283 @@
 #define PARAMETER_STATUS_TEMPERATURE_MAX "temperature_max"
 
 namespace Device {
-    class StatusFlagInterpretation {
+    class StatusFlagInterpreter {
     public:
     private:
-        explicit StatusFlagInterpretation(uint32_t flags);
+        explicit StatusFlagInterpreter(uint32_t flags);
 
     public:
         /**
-         *
-         * @return
+         * @return True if the device is initializing, False if running.
          */
         [[nodiscard]] inline bool isInitializing() const { return flags[0]; }
 
         /**
-         *
-         * @return
+         * @return True if the output of scan is muted, False otherwise.
          */
         [[nodiscard]] inline bool outputScanIsMuted() const { return flags[3]; }
 
         /**
-         *
-         * @return
+         * @return True if the rotation of the measuring head is unstable, False otherwise.
          */
         [[nodiscard]] inline bool headHasUnstableRotation() const { return flags[4]; }
 
         /**
-         *
-         * @return
+         * @return True if any warning is active, False otherwise.
          */
         [[nodiscard]] inline bool deviceHasWarning() const { return flags[9]; }
 
         /**
-         *
-         * @return
+         * @return True if the lens of the sensor is becoming dirty, False otherwise.
          */
         [[nodiscard]] inline bool hasLensContaminationWarning() const { return flags[10]; }
 
         /**
-         *
-         * @return
+         * @return True if the ambient temperature is becoming to low, False otherwise.
          */
         [[nodiscard]] inline bool hasLowTemperatureWarning() const { return flags[11]; }
 
         /**
-         *
-         * @return
+         * @return True if the ambient temperature is becoming to high, False otherwise.
          */
         [[nodiscard]] inline bool hasHighTemperatureWarning() const { return flags[12]; }
 
         /**
-         *
-         * @return
+         * @return True if the device is becoming overloaded, False otherwise.
          */
         [[nodiscard]] inline bool hasDeviceOverloadWarning() const { return flags[13]; }
 
         /**
-         *
-         * @return
+         * @return True if the device has an error, False otherwise.
          */
         [[nodiscard]] inline bool deviceHasError() const { return flags[17]; }
 
         /**
-         *
-         * @return
+         * @return True if the lens of the sensor is dirty (actions need to be taken), False otherwise.
          */
         [[nodiscard]] inline bool hasLensContaminationError() const { return flags[18]; }
 
         /**
-         *
-         * @return
+         * @return True if the temperature is too low (actions need to be taken), False otherwise.
          */
         [[nodiscard]] inline bool hasLowTemperatureError() const { return flags[19]; }
 
         /**
-         *
-         * @return
+         * @return True if the temperature is too high (actions need to be taken), False otherwise.
          */
         [[nodiscard]] inline bool hasHighTemperatureError() const { return flags[20]; }
 
         /**
-         *
-         * @return
+         * @return True if the device is overloaded (actions need to be taken), False otherwise.
          */
         [[nodiscard]] inline bool hasDeviceOverloadError() const { return flags[21]; }
 
         /**
-         *
-         * @return
+         * @return True if the device has an unrecoverable defect (a reboot is needed or other action need to be
+         * taken), False otherwise.
          */
         [[nodiscard]] inline bool hasUnrecoverableDefect() const { return flags[31]; }
 
     private:
         std::bitset<32> flags{};
+
         friend class DeviceStatus;
     };
 
+    /**
+     * Helper struct casting the content of an optional string to a numeric type T or a default fallback value.
+     * @tparam T The return type T to cast the optional to.
+     */
     template<typename T>
-    struct QuietAnyCastHelper;
+    struct QuietCastOptionalHelper {
+        /**
+         * @return Nothing, always throws std::system_error.
+         */
+        static inline T castQuietly(const std::optional<std::string> &) {
+            throw Device::NotImplemented("QuietCastOptionalHelper<T>::Not implemented.");
+        };
+    };
 
     template<>
-    struct QuietAnyCastHelper<int64_t> {
+    struct QuietCastOptionalHelper<int64_t> {
         /**
-         *
-         * @param any
-         * @return
+         * Convert the content of an optional string to a 64 bits long signed integer or return
+         * nan if the optional is empty.
+         * @param optional The optional string to convert the value for.
+         * @return the converted int64 value or nan if the optional is empty.
          */
-        static inline unsigned int castQuietly(const std::any &any) {
-            return any.has_value() ? std::stoi(std::any_cast<std::string>(any))
-                                   : std::numeric_limits<int64_t>::quiet_NaN();
+        static inline int64_t castQuietly(const std::optional<std::string> &optional) {
+            return optional ? std::stoi(*optional) : std::numeric_limits<int64_t>::quiet_NaN();
         }
     };
 
     template<>
-    struct QuietAnyCastHelper<uint64_t> {
+    struct QuietCastOptionalHelper<uint64_t> {
         /**
-         *
-         * @param any
-         * @return
+         * Convert the content of an optional string to a 64 bits long unsigned integer or return
+         * nan if the optional is empty.
+         * @param optional The optional string to convert the value for.
+         * @return the converted uint64 value or nan if the optional is empty.
          */
-        static inline unsigned int castQuietly(const std::any &any) {
-            return any.has_value() ? std::stoul(std::any_cast<std::string>(any))
-                                   : std::numeric_limits<uint64_t>::quiet_NaN();
+        static inline uint64_t castQuietly(const std::optional<std::string> &optional) {
+            return optional ? std::stoul(*optional) : std::numeric_limits<uint64_t>::quiet_NaN();
         }
     };
 
     template<>
-    struct QuietAnyCastHelper<uint32_t> {
+    struct QuietCastOptionalHelper<uint32_t> {
         /**
-         *
-         * @param any
-         * @return
+         * Convert the content of an optional string to a 32 bits long unsigned integer or return
+         * nan if the optional is empty.
+         * @param optional The optional string to convert the value for.
+         * @return the converted uint32 value or nan if the optional is empty.
          */
-        static inline unsigned int castQuietly(const std::any &any) {
-            return any.has_value() ? std::stoul(std::any_cast<std::string>(any))
-                                   : std::numeric_limits<uint32_t>::quiet_NaN();
+        static inline uint32_t castQuietly(const std::optional<std::string> &optional) {
+            return optional ? std::stoul(*optional) : std::numeric_limits<uint32_t>::quiet_NaN();
         }
     };
 
     class DeviceStatus {
     private:
         /**
-         *
-         * @tparam T
-         * @param parameters
-         * @param key
-         * @return
+         * Get a node from a parameters map as an optional. If the key is not found, the optional is empty.
+         * @param parameters The parameters map to search the key in.
+         * @param key The key of the parameter to find.
+         * @return An optional containing the parameter matching the key or empty if the key is not within the map.
          */
-        template<typename T>
-        static inline std::any getAsAnyOrNullopt(const Parameters::ParametersMap &parameters,
-                                                 const std::string &key) noexcept(false) {
-            if (!parameters.count(key))
-                return std::nullopt;
-            return std::make_any<T>(parameters.at(key));
+        static inline std::optional<std::string> getOptionalFromParameters(const Parameters::ParametersMap &parameters,
+                                                                           const std::string &key) noexcept(false) {
+            return !parameters.count(key) ? std::nullopt : std::make_optional<std::string>(parameters.at(key));
         }
-
-        /**
-         *
-         * @param systemStatusMap
-         */
-        explicit DeviceStatus(Parameters::ParametersMap systemStatusMap);
 
     public:
         /**
-         *
-         * @return
+         * Construct an empty device status. Values returned by the call of getter methods are NaNs.
          */
-        [[nodiscard]] inline StatusFlagInterpretation getStatusFlags() const {
-            const auto any{getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_FLAGS)};
-            return any.has_value() ?
-                   StatusFlagInterpretation(QuietAnyCastHelper<uint32_t>::castQuietly(any))
-                                   : StatusFlagInterpretation(0x00000000);
+        DeviceStatus() = default;
+
+        /**
+         * Construct a device status from a parameters map containing the status values.
+         * @param systemStatusMap The device status values.
+         */
+        explicit DeviceStatus(Parameters::ParametersMap systemStatusMap);
+
+        /**
+         * Get the status flag of the device.
+         * @return a StatusFlagInterpreter allowing to query the state of the device.
+         */
+        [[nodiscard]] inline StatusFlagInterpreter getStatusFlags() const {
+            const auto optional{getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_FLAGS)};
+            return optional ? StatusFlagInterpreter(QuietCastOptionalHelper<uint32_t>::castQuietly(optional))
+                            : StatusFlagInterpreter(0x00000000);
         }
 
         /**
-         *
-         * @return
+         * @return Get the current CPU load of the device.
          */
         [[nodiscard]] inline uint64_t getCpuLoad() const {
-            return QuietAnyCastHelper<uint64_t>::castQuietly(
-                    getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_LOAD_INDICATION));
+            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+                    getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_LOAD_INDICATION));
         }
 
         /**
-         *
-         * @return
+         * @return Get the internal raw system time of the device.
          */
         [[nodiscard]] inline uint64_t getRawSystemTime() const {
-            return QuietAnyCastHelper<uint64_t>::castQuietly(
-                    getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_SYSTEM_TIME_RAW));
+            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+                    getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_SYSTEM_TIME_RAW));
         }
 
         /**
-         *
-         * @return
+         * @return Get the time since which the device has been turned on.
          */
         [[nodiscard]] inline uint64_t getUptime() const {
-            return QuietAnyCastHelper<uint64_t>::castQuietly(
-                    getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_UP_TIME));
+            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+                    getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_UP_TIME));
         }
 
         /**
-         *
-         * @return
+         * @return Get the number of power cycle of the device.
          */
         [[nodiscard]] inline uint64_t getPowerCyclesCount() const {
-            return QuietAnyCastHelper<uint64_t>::castQuietly(
-                    getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_POWER_CYCLES));
+            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+                    getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_POWER_CYCLES));
         }
 
         /**
-         *
-         * @return
+         * @return Get the overall operating time of the device.
          */
         [[nodiscard]] inline uint64_t getOperationTime() const {
-            return QuietAnyCastHelper<uint64_t>::castQuietly(
-                    getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_OPERATION_TIME));
+            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+                    getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_OPERATION_TIME));
         }
 
         /**
-         *
-         * @return
+         * @return Get the overall operating time scaled by temperature of the device.
          */
         [[nodiscard]] inline uint64_t getScaledOperationTime() const {
-            return QuietAnyCastHelper<uint64_t>::castQuietly(
-                    getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_OPERATION_TIME_SCALED));
+            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+                    getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_OPERATION_TIME_SCALED));
         }
 
         /**
-         *
-         * @return
+         * @return Get the current temperature of the device.
          */
         [[nodiscard]] inline uint64_t getCurrentTemperature() const {
-            return QuietAnyCastHelper<uint64_t>::castQuietly(
-                    getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_CURRENT));
+            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+                    getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_CURRENT));
         }
 
         /**
-         *
-         * @return
+         * @return Get the minimal lifetime operating temperature of the device.
          */
         [[nodiscard]] inline uint64_t getMinimalTemperature() const {
-            return QuietAnyCastHelper<uint64_t>::castQuietly(
-                    getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_MIN));
+            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+                    getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_MIN));
         }
 
         /**
-         *
-         * @return
+         * @return Get the maximal lifetime operating temperature of the device.
          */
         [[nodiscard]] inline uint64_t getMaximalTemperature() const {
-            return QuietAnyCastHelper<uint64_t>::castQuietly(
-                    getAsAnyOrNullopt<std::string>(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_MAX));
+            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+                    getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_MAX));
+        }
+
+        /**
+         * @return Get the timestamp of the status.
+         */
+        [[maybe_unused]] [[nodiscard]] inline const std::chrono::steady_clock::time_point &getTimestamp() const {
+            return timestamp;
         }
 
     private:
         Parameters::ParametersMap systemStatusMap;
+        std::chrono::steady_clock::time_point timestamp{std::chrono::steady_clock::now()};
 
-        template<typename T> friend
-        class StatusWatcher;
+        friend class StatusWatcher;
     };
 
-    using OnStatusAvailableCallback = std::function<void(const DeviceStatus &)>;
-
-    template<typename Duration>
     class StatusWatcher {
         using LockType = std::mutex;
         using Cv = std::condition_variable;
+        using RealtimeStatus = farbot::RealtimeObject<DeviceStatus, farbot::RealtimeObjectOptions::realtimeMutatable>;
+        using OnStatusAvailableCallback = std::function<void(const DeviceStatus &)>;
+
     public:
         /**
-         *
-         * @param sharedDevice
-         * @param period
-         * @param callback
+         * @param sharedDevice The device to watch.
+         * @param period The period of the status update request to the device.
          */
-        StatusWatcher(std::shared_ptr<R2000> sharedDevice,
-                      Duration period,
-                      OnStatusAvailableCallback callback) : device(std::move(sharedDevice)),
-                                                            period(period) {
-            callbacks.push_back(std::move(callback));
-            statusWatcherTaskFuture = std::async(std::launch::async, &StatusWatcher::statusWatcherTask, this);
-        }
+        StatusWatcher(std::shared_ptr<R2000> sharedDevice, std::chrono::seconds period);
 
         /**
-         *
-         * @return
+         * @return True if the connection to the device is alive, False otherwise.
          */
-        [[nodiscard]] inline bool isAlive() const {
-            return isConnected.load(std::memory_order_acquire);
-        }
-
-        void statusWatcherTask() {
-            const auto threadId{device->getName() + ".StatusWatcher"};
-            pthread_setname_np(pthread_self(), threadId.c_str());
-            Device::Commands::GetParametersCommand getParametersCommand{*device};
-            for (; !interruptFlag.load(std::memory_order_acquire);) {
-                auto future{getParametersCommand.asyncExecuteFuture(1s, systemStatusBuilder)};
-                if (!future) {
-                    std::clog << "StatusWatcher::" << device->getName()
-                              << "::Could not request to get parameters from the device." << std::endl;
-                } else {
-                    future->wait();
-                    auto result{future->get()};
-                    const auto requestResult{result.first};
-                    const auto hasSucceed{requestResult == AsyncRequestResult::SUCCESS};
-                    const auto values{result.second};
-                    if (hasSucceed && values) {
-                        isConnected.store(true, std::memory_order_release);
-                        const DeviceStatus status{*values};
-                        std::unique_lock<LockType> guard{callbackLock, std::adopt_lock};
-                        for (auto &callback : callbacks)
-                            std::invoke(callback, status);
-                    } else {
-                        std::clog << "StatusWatcher::" << device->getName() << "::Could not get the status "
-                                  << "from the device (" << asyncResultToString(requestResult) << ")." << std::endl;
-                        isConnected.store(false, std::memory_order_release);
-                    }
-                }
-                std::unique_lock<LockType> interruptGuard{interruptCvLock, std::adopt_lock};
-                cv.wait_for(interruptGuard, period, [this]() -> bool {
-                    return interruptFlag.load(std::memory_order_acquire);
-                });
-            }
-        }
+        [[nodiscard]] inline bool isAlive() const { return isConnected.load(std::memory_order_acquire); }
 
         /**
-         *
-         * @param callback
+         * @param callback a callback to execute when a new update status is available.
          */
         [[maybe_unused]] inline void addCallback(OnStatusAvailableCallback callback) {
             std::unique_lock<LockType> guard{callbackLock, std::adopt_lock};
@@ -351,40 +306,46 @@ namespace Device {
         }
 
         /**
-         *
+         * Get the last status received from the device. This method is non-blocking, wait and lock free.
+         * @return  the last status received.
          */
-        virtual ~StatusWatcher() {
-            if (!interruptFlag.load(std::memory_order_acquire)) {
-                {
-                    std::unique_lock<LockType> guard{interruptCvLock, std::adopt_lock};
-                    interruptFlag.store(true, std::memory_order_release);
-                    cv.notify_one();
-                }
-                statusWatcherTaskFuture.wait();
-            }
-        }
+        [[maybe_unused]] [[nodiscard]] virtual inline DeviceStatus getLastReceivedStatus() const {
+            RealtimeStatus::ScopedAccess <farbot::ThreadType::nonRealtime> statusGuard{*realtimeStatus};
+            return *statusGuard;
+        };
+
+        /**
+         * Stop the watcher task.
+         */
+        virtual ~StatusWatcher();
+
+    private:
+        /**
+         * Main task that update periodically the device status.
+         */
+        void statusWatcherTask();
 
     private:
         std::shared_ptr<R2000> device{nullptr};
+        std::unique_ptr<RealtimeStatus> realtimeStatus{std::make_unique<RealtimeStatus>(DeviceStatus{})};
         std::future<void> statusWatcherTaskFuture{};
-        Cv cv{};
+        Cv interruptCv{};
         LockType interruptCvLock{};
         LockType callbackLock{};
         std::atomic_bool interruptFlag{false};
-        Duration period{};
+        std::chrono::seconds period{};
         std::vector<OnStatusAvailableCallback> callbacks{};
         std::atomic_bool isConnected{false};
-        const Parameters::ReadOnlyParameters::SystemStatus systemStatusBuilder{
-                Parameters::ReadOnlyParameters::SystemStatus{}
-                        .requestStatusFlags()
-                        .requestLoadIndication()
-                        .requestSystemTimeRaw()
-                        .requestUpTime()
-                        .requestPowerCycles()
-                        .requestOperationTime()
-                        .requestOperationTimeScaled()
-                        .requestCurrentTemperature()
-                        .requestMinimalTemperature()
-                        .requestMaximalTemperature()};
+        const Parameters::ReadOnlyParameters::SystemStatus systemStatus{Parameters::ReadOnlyParameters::SystemStatus{}
+                                                                                .requestStatusFlags()
+                                                                                .requestLoadIndication()
+                                                                                .requestSystemTimeRaw()
+                                                                                .requestUpTime()
+                                                                                .requestPowerCycles()
+                                                                                .requestOperationTime()
+                                                                                .requestOperationTimeScaled()
+                                                                                .requestCurrentTemperature()
+                                                                                .requestMinimalTemperature()
+                                                                                .requestMaximalTemperature()};
     };
-}
+} // namespace Device

@@ -224,21 +224,21 @@ namespace Device::Parameters {
         struct LensContaminationMonitor;
     };
 
-    class ReadOnlyBuilderBase {
+    class ReadOnlyRequestBuilder {
     public:
         ADD_BUILD_BUILDER_METHOD(build, ParametersList, parameters);
     protected:
         ParametersList parameters{};
     };
 
-    class WriteBuilderBase {
+    class ReadWriteRequestBuilder {
     public:
         ADD_BUILD_BUILDER_METHOD(build, ParametersMap, parameters);
     protected:
         ParametersMap parameters{};
     };
 
-    class HandleParameters : public WriteBuilderBase {
+    class HandleParameters : public ReadWriteRequestBuilder {
     protected:
         const boost::unordered_map<PACKET_TYPE, std::string> scanPacketString =
                 boost::assign::map_list_of(PACKET_TYPE::A, "A")(PACKET_TYPE::B, "B")(PACKET_TYPE::C, "C");
@@ -249,32 +249,58 @@ namespace Device::Parameters {
     namespace internals {
 
         template<typename Section>
-        class ParametersBuilderImpl {
+        class ParametersRequestBuilderImpl {
         };
 
         template<>
-        class ParametersBuilderImpl<ReadWrite::BasicInformation> : public WriteBuilderBase {
+        class ParametersRequestBuilderImpl<ReadWrite::BasicInformation> : public ReadWriteRequestBuilder {
         public:
-            ADD_RW_PARAMETER_BUILDER_METHOD(withUserTag, ParametersBuilderImpl &, const std::string&, userTag,
+            /**
+             *
+             * @param userTag
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withUserTag, ParametersRequestBuilderImpl &, const std::string&, userTag,
                                             PARAMETER_USER_TAG);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withUserNotes, ParametersBuilderImpl &, const std::string&, userNotes,
+            /**
+             *
+             * @param userNotes
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withUserNotes, ParametersRequestBuilderImpl &, const std::string&, userNotes,
                                             PARAMETER_USER_NOTES);
         };
 
         template<>
-        class ParametersBuilderImpl<ReadWrite::Ethernet> : public WriteBuilderBase {
+        class ParametersRequestBuilderImpl<ReadWrite::Ethernet> : public ReadWriteRequestBuilder {
         public:
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withIpMode, ParametersBuilderImpl &, IpMode, mode,
+            /**
+             *
+             * @param mode
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withIpMode, ParametersRequestBuilderImpl &, IpMode, mode,
                                                            IpModeToString.at(mode), PARAMETER_IP_ADDRESS);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withIpAddress, ParametersBuilderImpl &, const std::string&, ipAddress,
+            /**
+             *
+             * @param ipAddress
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withIpAddress, ParametersRequestBuilderImpl &, const std::string&, ipAddress,
                                             PARAMETER_IP_ADDRESS);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withSubnetMask, ParametersBuilderImpl &, const std::string&, subnetMask,
+            /**
+             *
+             * @param subnetMask
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withSubnetMask, ParametersRequestBuilderImpl &, const std::string&, subnetMask,
                                             PARAMETER_SUBNET_MASK);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withGateway, ParametersBuilderImpl &, const std::string&, gateway,
+            /**
+             *
+             * @param gateway
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withGateway, ParametersRequestBuilderImpl &, const std::string&, gateway,
                                             PARAMETER_GATEWAY);
 
         private:
@@ -284,21 +310,38 @@ namespace Device::Parameters {
         };
 
         template<>
-        class ParametersBuilderImpl<ReadWrite::Measuring> : public WriteBuilderBase {
+        class ParametersRequestBuilderImpl<ReadWrite::Measuring> : public ReadWriteRequestBuilder {
         public:
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withOperatingMode, ParametersBuilderImpl &, OPERATING_MODE,
+            /**
+             *
+             * @param operatingMode
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withOperatingMode, ParametersRequestBuilderImpl &, OPERATING_MODE,
                                                            operatingMode, operatingModeToString.at(operatingMode),
                                                            PARAMETER_OPERATING_MODE);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withScanFrequency, ParametersBuilderImpl &, const std::string&,
+            /**
+             *
+             * @param scanFrequency
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withScanFrequency, ParametersRequestBuilderImpl &, const std::string&,
                                             scanFrequency,
                                             PARAMETER_SCAN_FREQUENCY);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withScanDirection, ParametersBuilderImpl &, SCAN_DIRECTION,
+            /**
+             *
+             * @param scanDirection
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withScanDirection, ParametersRequestBuilderImpl &, SCAN_DIRECTION,
                                                            scanDirection, scanDirectionToString.at(scanDirection),
                                                            PARAMETER_SCAN_DIRECTION);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withSamplesPerScan, ParametersBuilderImpl &, const std::string&,
+            /**
+             *
+             * @param samplesPerScan
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withSamplesPerScan, ParametersRequestBuilderImpl &, const std::string&,
                                             samplesPerScan,
                                             PARAMETER_SAMPLES_PER_SCAN);
 
@@ -311,49 +354,100 @@ namespace Device::Parameters {
         };
 
         template<>
-        class ParametersBuilderImpl<ReadWrite::HmiDisplay> : public WriteBuilderBase {
+        class ParametersRequestBuilderImpl<ReadWrite::HmiDisplay> : public ReadWriteRequestBuilder {
         public:
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withHmiDisplayMode, ParametersBuilderImpl &,
+            /**
+             *
+             * @param displayMode
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withHmiDisplayMode, ParametersRequestBuilderImpl &,
                                                            HMI_DISPLAY_MODE,
                                                            displayMode, HmiDisplayModeToString.at(displayMode),
                                                            PARAMETER_HMI_DISPLAY_MODE);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withHmiLanguage, ParametersBuilderImpl &, Language, language,
+            /**
+             *
+             * @param language
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withHmiLanguage, ParametersRequestBuilderImpl &, Language, language,
                                                            LanguageToString.at(language), PARAMETER_HMI_LANGUAGE);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_ON(lockHmiButton, ParametersBuilderImpl &, PARAMETER_HMI_BUTTON_LOCK);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(unlockHmiButton, ParametersBuilderImpl &, PARAMETER_HMI_BUTTON_LOCK);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_ON(lockHmiParameters, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(lockHmiButton, ParametersRequestBuilderImpl &, PARAMETER_HMI_BUTTON_LOCK);
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(unlockHmiButton, ParametersRequestBuilderImpl &, PARAMETER_HMI_BUTTON_LOCK);
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(lockHmiParameters, ParametersRequestBuilderImpl &,
                                                PARAMETER_HMI_PARAMETER_LOCK);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(unlockHmiParameters, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(unlockHmiParameters, ParametersRequestBuilderImpl &,
                                                 PARAMETER_HMI_PARAMETER_LOCK);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_ON(enableLEDLocatorIndication, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(enableLEDLocatorIndication, ParametersRequestBuilderImpl &,
                                                PARAMETER_LOCATOR_INDICATION);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(disableLEDLocatorIndication, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(disableLEDLocatorIndication, ParametersRequestBuilderImpl &,
                                                 PARAMETER_LOCATOR_INDICATION);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiStaticLogo, ParametersBuilderImpl &, const std::string&, base64Logo,
+            /**
+             *
+             * @param base64Logo
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiStaticLogo, ParametersRequestBuilderImpl &, const std::string&, base64Logo,
                                             PARAMETER_HMI_STATIC_LOGO);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiStaticText1, ParametersBuilderImpl &, const std::string&, line,
+            /**
+             *
+             * @param line
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiStaticText1, ParametersRequestBuilderImpl &, const std::string&, line,
                                             PARAMETER_HMI_STATIC_TEXT_1);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiStaticText2, ParametersBuilderImpl &, const std::string&, line,
+            /**
+             *
+             * @param line
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiStaticText2, ParametersRequestBuilderImpl &, const std::string&, line,
                                             PARAMETER_HMI_STATIC_TEXT_2);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiApplicationBitmap, ParametersBuilderImpl &, const std::string&,
+            /**
+             *
+             * @param base64Bitmap
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiApplicationBitmap, ParametersRequestBuilderImpl &, const std::string&,
                                             base64Bitmap,
                                             PARAMETER_HMI_APPLICATION_BITMAP);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiApplicationText1, ParametersBuilderImpl &, const std::string&, line,
+            /**
+             *
+             * @param line
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiApplicationText1, ParametersRequestBuilderImpl &, const std::string&, line,
                                             PARAMETER_HMI_APPLICATION_TEXT_1);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiApplicationText2, ParametersBuilderImpl &, const std::string&, line,
+            /**
+             *
+             * @param line
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiApplicationText2, ParametersRequestBuilderImpl &, const std::string&, line,
                                             PARAMETER_HMI_APPLICATION_TEXT_2);
 
         private:
@@ -374,100 +468,189 @@ namespace Device::Parameters {
         };
 
         template<>
-        class ParametersBuilderImpl<ReadWrite::HandleTcp> : public HandleParameters {
+        class ParametersRequestBuilderImpl<ReadWrite::HandleTcp> : public HandleParameters {
         public:
-            ParametersBuilderImpl() { (void) withoutWatchdog(); }
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_ON(withWatchdog, ParametersBuilderImpl &, PARAMETER_HANDLE_WATCHDOG);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(withoutWatchdog, ParametersBuilderImpl &, PARAMETER_HANDLE_WATCHDOG);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withWatchdogTimeout, ParametersBuilderImpl &,
+            /**
+             *
+             */
+            ParametersRequestBuilderImpl() { (void) withoutWatchdog(); }
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(withWatchdog, ParametersRequestBuilderImpl &, PARAMETER_HANDLE_WATCHDOG);
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(withoutWatchdog, ParametersRequestBuilderImpl &, PARAMETER_HANDLE_WATCHDOG);
+            /**
+             *
+             * @param watchdogtimeout
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withWatchdogTimeout, ParametersRequestBuilderImpl &,
                                                            const unsigned int,
                                                            watchdogtimeout, std::to_string(watchdogtimeout),
                                                            PARAMETER_HANDLE_WATCHDOG_TIMEOUT);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketType, ParametersBuilderImpl &, PACKET_TYPE,
+            /**
+             *
+             * @param packetType
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketType, ParametersRequestBuilderImpl &, PACKET_TYPE,
                                                            packetType,
                                                            scanPacketString.at(packetType),
                                                            PARAMETER_HANDLE_PACKET_TYPE);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketCrc, ParametersBuilderImpl &, CRC, crcType,
+            /**
+             *
+             * @param crcType
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketCrc, ParametersRequestBuilderImpl &, CRC, crcType,
                                                            crcToString.at(crcType), PARAMETER_HANDLE_PACKET_CRC);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withStartAngle, ParametersBuilderImpl &, const int,
+            /**
+             *
+             * @param startAngle
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withStartAngle, ParametersRequestBuilderImpl &, const int,
                                                            startAngle,
                                                            std::to_string(startAngle), PARAMETER_HANDLE_START_ANGLE);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfPointsPerScan, ParametersBuilderImpl &,
+            /**
+             *
+             * @param numberOfPointsPerScan
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfPointsPerScan, ParametersRequestBuilderImpl &,
                                                            const unsigned int, numberOfPointsPerScan,
                                                            std::to_string(numberOfPointsPerScan),
                                                            PARAMETER_HANDLE_MAX_NUM_POINTS_SCAN);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfScanToSkip, ParametersBuilderImpl &,
+            /**
+             *
+             * @param numberOfScanToSkip
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfScanToSkip, ParametersRequestBuilderImpl &,
                                                            const unsigned int,
                                                            numberOfScanToSkip, std::to_string(numberOfScanToSkip),
                                                            PARAMETER_HANDLE_SKIP_SCANS);
         };
 
         template<>
-        class ParametersBuilderImpl<ReadWrite::HandleUdp> : public HandleParameters {
+        class ParametersRequestBuilderImpl<ReadWrite::HandleUdp> : public HandleParameters {
         public:
-            ParametersBuilderImpl() { (void) withoutWatchdog(); }
-
-            ADD_RW_PARAMETER_BUILDER_METHOD(withHostname, ParametersBuilderImpl &, const std::string&, hostname,
+            /**
+             *
+             */
+            ParametersRequestBuilderImpl() { (void) withoutWatchdog(); }
+            /**
+             *
+             * @param hostname
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD(withHostname, ParametersRequestBuilderImpl &, const std::string&, hostname,
                                             PARAMETER_HANDLE_ADDRESS);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPort, ParametersBuilderImpl &, const uint16_t, port,
+            /**
+             *
+             * @param port
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPort, ParametersRequestBuilderImpl &, const uint16_t, port,
                                                            std::to_string(port), PARAMETER_HANDLE_PORT);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_ON(withWatchdog, ParametersBuilderImpl &, PARAMETER_HANDLE_WATCHDOG);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(withoutWatchdog, ParametersBuilderImpl &, PARAMETER_HANDLE_WATCHDOG);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withWatchdogTimeout, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(withWatchdog, ParametersRequestBuilderImpl &, PARAMETER_HANDLE_WATCHDOG);
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(withoutWatchdog, ParametersRequestBuilderImpl &, PARAMETER_HANDLE_WATCHDOG);
+            /**
+             *
+             * @param watchdogtimeout
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withWatchdogTimeout, ParametersRequestBuilderImpl &,
                                                            const unsigned int,
                                                            watchdogtimeout, std::to_string(watchdogtimeout),
                                                            PARAMETER_HANDLE_WATCHDOG_TIMEOUT);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketType, ParametersBuilderImpl &, PACKET_TYPE,
+            /**
+             *
+             * @param packetType
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketType, ParametersRequestBuilderImpl &, PACKET_TYPE,
                                                            packetType,
                                                            scanPacketString.at(packetType),
                                                            PARAMETER_HANDLE_PACKET_TYPE);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketCrc, ParametersBuilderImpl &, CRC, crcType,
+            /**
+             *
+             * @param crcType
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withPacketCrc, ParametersRequestBuilderImpl &, CRC, crcType,
                                                            crcToString.at(crcType), PARAMETER_HANDLE_PACKET_CRC);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withStartAngle, ParametersBuilderImpl &, const int,
+            /**
+             *
+             * @param startAngle
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withStartAngle, ParametersRequestBuilderImpl &, const int,
                                                            startAngle,
                                                            std::to_string(startAngle), PARAMETER_HANDLE_START_ANGLE);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfPointsPerScan, ParametersBuilderImpl &,
+            /**
+             *
+             * @param numberOfPointsPerScan
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfPointsPerScan, ParametersRequestBuilderImpl &,
                                                            const unsigned int, numberOfPointsPerScan,
                                                            std::to_string(numberOfPointsPerScan),
                                                            PARAMETER_HANDLE_MAX_NUM_POINTS_SCAN);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfScanToSkip, ParametersBuilderImpl &,
+            /**
+             *
+             * @param numberOfScanToSkip
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withNumberOfScanToSkip, ParametersRequestBuilderImpl &,
                                                            const unsigned int,
                                                            numberOfScanToSkip, std::to_string(numberOfScanToSkip),
                                                            PARAMETER_HANDLE_SKIP_SCANS);
         };
 
         template<>
-        class ParametersBuilderImpl<ReadWrite::LensContaminationMonitor> : public WriteBuilderBase {
+        class ParametersRequestBuilderImpl<ReadWrite::LensContaminationMonitor> : public ReadWriteRequestBuilder {
         public:
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withSensitivity, ParametersBuilderImpl &, LCM_SENSITIVITY,
+            /**
+             *
+             * @param sensitivity
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withSensitivity, ParametersRequestBuilderImpl &, LCM_SENSITIVITY,
                                                            sensitivity, LCMSensitivityToString.at(sensitivity),
                                                            PARAMETER_LCM_DETECTION_SENSITIVITY);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withDetectionPeriod, ParametersBuilderImpl &,
+            /**
+             *
+             * @param period
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withDetectionPeriod, ParametersRequestBuilderImpl &,
                                                            std::chrono::milliseconds, period,
                                                            std::to_string(period.count()),
                                                            PARAMETER_LCM_DETECTION_PERIOD);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_ON(withLcmEnabled, ParametersBuilderImpl &, PARAMETER_LCM_SECTOR_ENABLE);
-
-            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(withLcmDisabled, ParametersBuilderImpl &, PARAMETER_LCM_SECTOR_ENABLE);
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_ON(withLcmEnabled, ParametersRequestBuilderImpl &, PARAMETER_LCM_SECTOR_ENABLE);
+            /**
+             *
+             * @return
+             */
+            ADD_RW_PARAMETER_BUILDER_METHOD_OFF(withLcmDisabled, ParametersRequestBuilderImpl &, PARAMETER_LCM_SECTOR_ENABLE);
 
         private:
             const boost::unordered_map<LCM_SENSITIVITY, std::string> LCMSensitivityToString =
@@ -476,205 +659,396 @@ namespace Device::Parameters {
         };
 
         template<>
-        class ParametersBuilderImpl<ReadOnly::BasicInformation> : public ReadOnlyBuilderBase {
+        class ParametersRequestBuilderImpl<ReadOnly::BasicInformation> : public ReadOnlyRequestBuilder {
         public:
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestDeviceFamily, ParametersBuilderImpl &, PARAMETER_DEVICE_FAMILY);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestVendor, ParametersBuilderImpl &, PARAMETER_VENDOR);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestProduct, ParametersBuilderImpl &, PARAMETER_PRODUCT);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestPart, ParametersBuilderImpl &, PARAMETER_PART);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestSerial, ParametersBuilderImpl &, PARAMETER_SERIAL);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestFirmwareRevision, ParametersBuilderImpl &, PARAMETER_REVISION_FW);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestHardwareRevision, ParametersBuilderImpl &, PARAMETER_REVISION_HW);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withUserTag, ParametersBuilderImpl &, PARAMETER_USER_TAG);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withUserNotes, ParametersBuilderImpl &, PARAMETER_USER_NOTES);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestDeviceFamily, ParametersRequestBuilderImpl &, PARAMETER_DEVICE_FAMILY);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestVendor, ParametersRequestBuilderImpl &, PARAMETER_VENDOR);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestProduct, ParametersRequestBuilderImpl &, PARAMETER_PRODUCT);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestPart, ParametersRequestBuilderImpl &, PARAMETER_PART);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestSerial, ParametersRequestBuilderImpl &, PARAMETER_SERIAL);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestFirmwareRevision, ParametersRequestBuilderImpl &, PARAMETER_REVISION_FW);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestHardwareRevision, ParametersRequestBuilderImpl &, PARAMETER_REVISION_HW);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withUserTag, ParametersRequestBuilderImpl &, PARAMETER_USER_TAG);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withUserNotes, ParametersRequestBuilderImpl &, PARAMETER_USER_NOTES);
         };
 
         template<>
-        class ParametersBuilderImpl<ReadOnly::Capabilities> : public ReadOnlyBuilderBase {
+        class ParametersRequestBuilderImpl<ReadOnly::Capabilities> : public ReadOnlyRequestBuilder {
         public:
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestFeatureFlags, ParametersBuilderImpl &, PARAMETER_FEATURE_FLAGS);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestEmitterType, ParametersBuilderImpl &, PARAMETER_EMITTER_TYPE);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestRadialMinRange, ParametersBuilderImpl &, PARAMETER_RADIAL_RANGE_MIN);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestRadialMaxRange, ParametersBuilderImpl &, PARAMETER_RADIAL_RANGE_MAX);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestRadialResolution, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestFeatureFlags, ParametersRequestBuilderImpl &, PARAMETER_FEATURE_FLAGS);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestEmitterType, ParametersRequestBuilderImpl &, PARAMETER_EMITTER_TYPE);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestRadialMinRange, ParametersRequestBuilderImpl &, PARAMETER_RADIAL_RANGE_MIN);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestRadialMaxRange, ParametersRequestBuilderImpl &, PARAMETER_RADIAL_RANGE_MAX);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestRadialResolution, ParametersRequestBuilderImpl &,
                                             PARAMETER_RADIAL_RESOLUTION);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestAngularFov, ParametersBuilderImpl &, PARAMETER_ANGULAR_FOV);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestAngularResolution, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestAngularFov, ParametersRequestBuilderImpl &, PARAMETER_ANGULAR_FOV);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestAngularResolution, ParametersRequestBuilderImpl &,
                                             PARAMETER_ANGULAR_RESOLUTION);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestMinimalScanFrequency, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMinimalScanFrequency, ParametersRequestBuilderImpl &,
                                             PARAMETER_SCAN_FREQUENCY_MIN);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalScanFrequency, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalScanFrequency, ParametersRequestBuilderImpl &,
                                             PARAMETER_SCAN_FREQUENCY_MAX);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestMinimalSamplingRate, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMinimalSamplingRate, ParametersRequestBuilderImpl &,
                                             PARAMETER_SAMPLING_RATE_MIN);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalSamplingRate, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalSamplingRate, ParametersRequestBuilderImpl &,
                                             PARAMETER_SAMPLING_RATE_MAX);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalConnections, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalConnections, ParametersRequestBuilderImpl &,
                                             PARAMETER_MAX_CONNECTIONS);
         };
 
         template<>
-        class ParametersBuilderImpl<ReadOnly::Ethernet> : public ReadOnlyBuilderBase {
+        class ParametersRequestBuilderImpl<ReadOnly::Ethernet> : public ReadOnlyRequestBuilder {
         public:
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentIpMode, ParametersBuilderImpl &, PARAMETER_IP_MODE_CURRENT);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentIpAddress, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentIpMode, ParametersRequestBuilderImpl &, PARAMETER_IP_MODE_CURRENT);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentIpAddress, ParametersRequestBuilderImpl &,
                                             PARAMETER_IP_ADDRESS_CURRENT);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentSubnetMask, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentSubnetMask, ParametersRequestBuilderImpl &,
                                             PARAMETER_SUBNET_MASK_CURRENT);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentGateway, ParametersBuilderImpl &, PARAMETER_GATEWAY_CURRENT);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestMacAddress, ParametersBuilderImpl &, PARAMETER_MAC_ADDRESS);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withIpMode, ParametersBuilderImpl &, PARAMETER_IP_MODE);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withIpAddress, ParametersBuilderImpl &, PARAMETER_IP_ADDRESS);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withSubnetMask, ParametersBuilderImpl &, PARAMETER_SUBNET_MASK);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withGateway, ParametersBuilderImpl &, PARAMETER_GATEWAY);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentGateway, ParametersRequestBuilderImpl &, PARAMETER_GATEWAY_CURRENT);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMacAddress, ParametersRequestBuilderImpl &, PARAMETER_MAC_ADDRESS);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withIpMode, ParametersRequestBuilderImpl &, PARAMETER_IP_MODE);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withIpAddress, ParametersRequestBuilderImpl &, PARAMETER_IP_ADDRESS);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withSubnetMask, ParametersRequestBuilderImpl &, PARAMETER_SUBNET_MASK);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withGateway, ParametersRequestBuilderImpl &, PARAMETER_GATEWAY);
         };
 
         template<>
-        class ParametersBuilderImpl<ReadOnly::Measuring> : public ReadOnlyBuilderBase {
+        class ParametersRequestBuilderImpl<ReadOnly::Measuring> : public ReadOnlyRequestBuilder {
         public:
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestMeasuredFrequency, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMeasuredFrequency, ParametersRequestBuilderImpl &,
                                             PARAMETER_SCAN_FREQUENCY_MEASURED);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withOperatingMode, ParametersBuilderImpl &, PARAMETER_OPERATING_MODE);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withScanFrequency, ParametersBuilderImpl &, PARAMETER_SCAN_FREQUENCY);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withScanDirection, ParametersBuilderImpl &, PARAMETER_SCAN_DIRECTION);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withSamplesPerScan, ParametersBuilderImpl &, PARAMETER_SAMPLES_PER_SCAN);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withOperatingMode, ParametersRequestBuilderImpl &, PARAMETER_OPERATING_MODE);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withScanFrequency, ParametersRequestBuilderImpl &, PARAMETER_SCAN_FREQUENCY);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withScanDirection, ParametersRequestBuilderImpl &, PARAMETER_SCAN_DIRECTION);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withSamplesPerScan, ParametersRequestBuilderImpl &, PARAMETER_SAMPLES_PER_SCAN);
         };
 
         template<>
-        class ParametersBuilderImpl<ReadOnly::HmiDisplay> : public ReadOnlyBuilderBase {
+        class ParametersRequestBuilderImpl<ReadOnly::HmiDisplay> : public ReadOnlyRequestBuilder {
         public:
-            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiDisplayMode, ParametersBuilderImpl &, PARAMETER_HMI_DISPLAY_MODE);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiLanguage, ParametersBuilderImpl &, PARAMETER_HMI_LANGUAGE);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withLockHmiButton, ParametersBuilderImpl &, PARAMETER_HMI_BUTTON_LOCK);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withLockHmiParameters, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiDisplayMode, ParametersRequestBuilderImpl &, PARAMETER_HMI_DISPLAY_MODE);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiLanguage, ParametersRequestBuilderImpl &, PARAMETER_HMI_LANGUAGE);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withLockHmiButton, ParametersRequestBuilderImpl &, PARAMETER_HMI_BUTTON_LOCK);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withLockHmiParameters, ParametersRequestBuilderImpl &,
                                             PARAMETER_HMI_PARAMETER_LOCK);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withLEDLocatorIndication, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withLEDLocatorIndication, ParametersRequestBuilderImpl &,
                                             PARAMETER_LOCATOR_INDICATION);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiStaticLogo, ParametersRequestBuilderImpl &, PARAMETER_HMI_STATIC_LOGO);
 
-            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiStaticLogo, ParametersBuilderImpl &, PARAMETER_HMI_STATIC_LOGO);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiStaticText1, ParametersBuilderImpl &, PARAMETER_HMI_STATIC_TEXT_1);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiStaticText2, ParametersBuilderImpl &, PARAMETER_HMI_STATIC_TEXT_2);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiApplicationBitmap, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiStaticText1, ParametersRequestBuilderImpl &, PARAMETER_HMI_STATIC_TEXT_1);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiStaticText2, ParametersRequestBuilderImpl &, PARAMETER_HMI_STATIC_TEXT_2);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiApplicationBitmap, ParametersRequestBuilderImpl &,
                                             PARAMETER_HMI_APPLICATION_BITMAP);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiApplicationText1, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiApplicationText1, ParametersRequestBuilderImpl &,
                                             PARAMETER_HMI_APPLICATION_TEXT_1);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiApplicationText2, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withHmiApplicationText2, ParametersRequestBuilderImpl &,
                                             PARAMETER_HMI_APPLICATION_TEXT_2);
         };
 
         template<>
-        class ParametersBuilderImpl<ReadOnly::SystemStatus> : public ReadOnlyBuilderBase {
+        class ParametersRequestBuilderImpl<ReadOnly::SystemStatus> : public ReadOnlyRequestBuilder {
         public:
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestStatusFlags, ParametersBuilderImpl &, PARAMETER_STATUS_FLAGS);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestLoadIndication, ParametersBuilderImpl &, PARAMETER_LOAD_INDICATION);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestSystemTimeRaw, ParametersBuilderImpl &, PARAMETER_SYSTEM_TIME_RAW);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestUpTime, ParametersBuilderImpl &, PARAMETER_UP_TIME);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestPowerCycles, ParametersBuilderImpl &, PARAMETER_POWER_CYCLES);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestOperationTime, ParametersBuilderImpl &, PARAMETER_OPERATION_TIME);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestOperationTimeScaled, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestStatusFlags, ParametersRequestBuilderImpl &, PARAMETER_STATUS_FLAGS);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestLoadIndication, ParametersRequestBuilderImpl &, PARAMETER_LOAD_INDICATION);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestSystemTimeRaw, ParametersRequestBuilderImpl &, PARAMETER_SYSTEM_TIME_RAW);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestUpTime, ParametersRequestBuilderImpl &, PARAMETER_UP_TIME);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestPowerCycles, ParametersRequestBuilderImpl &, PARAMETER_POWER_CYCLES);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestOperationTime, ParametersRequestBuilderImpl &, PARAMETER_OPERATION_TIME);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestOperationTimeScaled, ParametersRequestBuilderImpl &,
                                             PARAMETER_OPERATION_TIME_SCALED);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentTemperature, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestCurrentTemperature, ParametersRequestBuilderImpl &,
                                             PARAMETER_TEMPERATURE_CURRENT);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestMinimalTemperature, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMinimalTemperature, ParametersRequestBuilderImpl &,
                                             PARAMETER_TEMPERATURE_MIN);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalTemperature, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestMaximalTemperature, ParametersRequestBuilderImpl &,
                                             PARAMETER_TEMPERATURE_MAX);
         };
 
         template<>
-        class ParametersBuilderImpl<ReadOnly::LensContaminationMonitor> : public ReadOnlyBuilderBase {
+        class ParametersRequestBuilderImpl<ReadOnly::LensContaminationMonitor> : public ReadOnlyRequestBuilder {
         public:
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestLcmSectorWarningFlag, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestLcmSectorWarningFlag, ParametersRequestBuilderImpl &,
                                             PARAMETER_LCM_SECTOR_WARN_FLAGS);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(requestLcmSectorErrorFlag, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(requestLcmSectorErrorFlag, ParametersRequestBuilderImpl &,
                                             PARAMETER_LCM_SECTOR_ERROR_FLAGS);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withSensitivity, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withSensitivity, ParametersRequestBuilderImpl &,
                                             PARAMETER_LCM_DETECTION_SENSITIVITY);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withDetectionPeriod, ParametersBuilderImpl &,
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withDetectionPeriod, ParametersRequestBuilderImpl &,
                                             PARAMETER_LCM_DETECTION_PERIOD);
-
-            ADD_RO_PARAMETER_BUILDER_METHOD(withLcmState, ParametersBuilderImpl &, PARAMETER_LCM_SECTOR_ENABLE);
+            /**
+             *
+             * @return
+             */
+            ADD_RO_PARAMETER_BUILDER_METHOD(withLcmState, ParametersRequestBuilderImpl &, PARAMETER_LCM_SECTOR_ENABLE);
         };
 
     } // namespace internals
 
     template<typename AccessType>
-    class ParametersBuilder;
+    class ParametersRequestBuilder;
 
     template<>
-    class ParametersBuilder<ReadOnly> {
+    class ParametersRequestBuilder<ReadOnly> {
     public:
-        using BasicInformation [[maybe_unused]] = internals::ParametersBuilderImpl<ReadOnly::BasicInformation>;
-        using Capabilities [[maybe_unused]] = internals::ParametersBuilderImpl<ReadOnly::Capabilities>;
-        using Ethernet [[maybe_unused]] = internals::ParametersBuilderImpl<ReadOnly::Ethernet>;
-        using Measure [[maybe_unused]] = internals::ParametersBuilderImpl<ReadOnly::Measuring>;
-        using SystemStatus [[maybe_unused]] = internals::ParametersBuilderImpl<ReadOnly::SystemStatus>;
+        using BasicInformation [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadOnly::BasicInformation>;
+        using Capabilities [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadOnly::Capabilities>;
+        using Ethernet [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadOnly::Ethernet>;
+        using Measure [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadOnly::Measuring>;
+        using SystemStatus [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadOnly::SystemStatus>;
     };
 
     template<>
-    class ParametersBuilder<ReadWrite> {
+    class ParametersRequestBuilder<ReadWrite> {
     public:
-        using BasicInformation [[maybe_unused]] = internals::ParametersBuilderImpl<ReadWrite::BasicInformation>;
-        using Ethernet [[maybe_unused]] = internals::ParametersBuilderImpl<ReadWrite::Ethernet>;
-        using Measure [[maybe_unused]] = internals::ParametersBuilderImpl<ReadWrite::Measuring>;
-        using HmiDisplay [[maybe_unused]] = internals::ParametersBuilderImpl<ReadWrite::HmiDisplay>;
-        using UdpHandle [[maybe_unused]] = internals::ParametersBuilderImpl<ReadWrite::HandleUdp>;
-        using TcpHandle [[maybe_unused]] = internals::ParametersBuilderImpl<ReadWrite::HandleTcp>;
+        using BasicInformation [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadWrite::BasicInformation>;
+        using Ethernet [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadWrite::Ethernet>;
+        using Measure [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadWrite::Measuring>;
+        using HmiDisplay [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadWrite::HmiDisplay>;
+        using UdpHandle [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadWrite::HandleUdp>;
+        using TcpHandle [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadWrite::HandleTcp>;
     };
 
-    template<typename AccessType> using Parameters [[maybe_unused]] = ParametersBuilder<AccessType>;
-    using ReadOnlyParameters [[maybe_unused]] = ParametersBuilder<ReadOnly>;
-    using ReadWriteParameters [[maybe_unused]] = ParametersBuilder<ReadWrite>;
+    template<typename AccessType> using Parameters [[maybe_unused]] = ParametersRequestBuilder<AccessType>;
+    using ReadOnlyParameters [[maybe_unused]] = ParametersRequestBuilder<ReadOnly>;
+    using ReadWriteParameters [[maybe_unused]] = ParametersRequestBuilder<ReadWrite>;
 } // namespace Device::Parameters

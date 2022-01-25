@@ -15,7 +15,7 @@ Device::UDPLink::UDPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceH
           receptionByteBuffer(DATAGRAM_SIZE, 0),
           extractionByteBuffer(std::floor(DATAGRAM_SIZE * 1.5), 0) {
 
-    const auto port{deviceHandle->port};
+    const auto port{deviceHandle->getPort()};
     boost::asio::ip::udp::endpoint listenEndpoint{boost::asio::ip::udp::v4(), port};
     boost::system::error_code openError{};
     if (!socket->is_open()) {
@@ -46,7 +46,7 @@ Device::UDPLink::UDPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceH
         isConnected.store(true, std::memory_order_release);
         socket->async_receive_from(boost::asio::buffer(receptionByteBuffer), endPoint,
                                    [this](const boost::system::error_code &error, const unsigned int byteTransferred) {
-                                       handleBytesReception(error, byteTransferred);
+                                       onBytesReceived(error, byteTransferred);
                                    });
         ioServiceTask = std::async(std::launch::async, [this]() {
             ioService.run();
@@ -54,7 +54,7 @@ Device::UDPLink::UDPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceH
     }
 }
 
-void Device::UDPLink::handleBytesReception(const boost::system::error_code &error, unsigned int byteTransferred) {
+void Device::UDPLink::onBytesReceived(const boost::system::error_code &error, unsigned int byteTransferred) {
     if (error) {
         std::clog << __func__ << ":: Network error (" << error.message() << ")" << std::endl;
         isConnected.store(false, std::memory_order_release);
@@ -67,12 +67,12 @@ void Device::UDPLink::handleBytesReception(const boost::system::error_code &erro
     removeUsedByteRange(range.first, position, range.second);
     socket->async_receive_from(boost::asio::buffer(receptionByteBuffer), endPoint,
                                [this](const auto &error, const auto byteTransferred) {
-                                   handleBytesReception(error, byteTransferred);
+                                   onBytesReceived(error, byteTransferred);
                                });
 }
 
 Device::UDPLink::~UDPLink() {
-    boost::system::error_code placeholder;
+    boost::system::error_code placeholder{};
     socket->shutdown(boost::asio::ip::udp::socket::shutdown_receive, placeholder);
     socket->close(placeholder);
     if (!ioService.stopped()) {

@@ -16,17 +16,26 @@
 namespace Device {
     class R2000;
 
-    struct DeviceHandle;
+    class DeviceHandle;
 
     class TCPLink : public DataLink {
         static constexpr unsigned int DEFAULT_RECEPTION_BUFFER_SIZE{4096u};
         static constexpr unsigned int MAX_RECEPTION_BUFFER_SIZE{32768u};
         static constexpr unsigned int EXTRACTION_BUFFER_SIZE{DEFAULT_RECEPTION_BUFFER_SIZE * 4};
     private:
+        /**
+         * Helper class that assembles a scan received through packets on a TCP connection from the device.
+         */
         class TcpScanFactory : public ScanFactory {
         public:
             TcpScanFactory() = default;
 
+            /**
+             * Add a new packet to the scan being assembled.
+             * @param header The header of the packet.
+             * @param inputDistances The distances vector  of the points contained into the packet.
+             * @param inputAmplitudes The amplitudes vector of the points contained into the packet.
+             */
             inline void addPacket(const Data::Header &header, std::vector<std::uint32_t> &inputDistances,
                                   std::vector<std::uint32_t> &inputAmplitudes) override {
                 distances.insert(std::end(distances), std::cbegin(inputDistances), std::cend(inputDistances));
@@ -34,40 +43,55 @@ namespace Device {
                 headers.emplace_back(header);
             }
 
+            /**
+             * @return True if the factory is empty (no packet stored), False otherwise.
+             */
             [[nodiscard]] inline bool empty() const override { return headers.empty(); }
 
+            /**
+             * @return True if the factory holds enough packet to generate a complete scan, False otherwise.
+             */
             [[nodiscard]] inline bool isComplete() const override {
                 return !empty() && distances.size() >= headers[0].numPointsScan;
             }
 
+            /**
+             * @return Assembles and returns a scan from the stored packets. Subsequent call to this method will not
+             * yield a scan as the internals buffers are cleared every time this function is called.
+             */
             inline Data::Scan operator*() override {
                 Data::Scan scan{distances, amplitudes, headers, std::chrono::steady_clock::now()};
-                distances.clear();
-                amplitudes.clear();
-                headers.clear();
+                clear();
                 return scan;
             }
 
+            /**
+             * Clear the internals buffers and remove all packets stored if any.
+             */
             inline void clear() override {
                 distances.clear();
                 amplitudes.clear();
                 headers.clear();
             }
 
-            [[nodiscard]] inline bool isDifferentScan(const Data::Header &header) const override {
-                return (*this) != header.scanNumber;
-            }
-
-            [[nodiscard]] inline bool isNewScan(const Data::Header &header) override {
-                return header.scanNumber == 1;
-            }
-
+            /**
+             * @param scanNumber The scan number to test.
+             * @return True if the packets stored by this factory belong to a given scan number.
+             */
             inline bool operator==(const unsigned int scanNumber) const override {
                 return !empty() && headers.back().scanNumber == scanNumber;
             }
 
+            /**
+             * @param scanNumber The scan number to test.
+             * @return True if the packets stored by this factory don't belong to a given scan number.
+             */
             inline bool operator!=(const unsigned int scanNumber) const override { return !((*this) == scanNumber); }
 
+            /**
+             * Get the headers of all the packet currently stored by the factory.
+             * @param outputHeaders The vector to store the headers into.
+             */
             inline void getHeaders(std::vector<Data::Header> &outputHeaders) const override {
                 outputHeaders.insert(std::end(outputHeaders),
                                      std::begin(headers),
@@ -75,7 +99,6 @@ namespace Device {
             }
 
         private:
-
             // Distance data in polar form in millimeter
             std::vector<std::uint32_t> distances{};
             // Amplitude data in the range 32-4095, values lower than 32 indicate an error or undefined values
@@ -85,8 +108,16 @@ namespace Device {
         };
 
     public:
-        TCPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> queriedEndpoints) noexcept(false);
+        /**
+         *
+         * @param iDevice
+         * @param iHandle
+         */
+        TCPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle) noexcept(false);
 
+        /**
+         *
+         */
         ~TCPLink() override;
 
     private:
@@ -107,11 +138,9 @@ namespace Device {
             boost::system::error_code placeholder{};
             socket->shutdown(boost::asio::ip::tcp::socket::shutdown_both, placeholder);
             socket->close(placeholder);
-            boost::asio::async_connect(*socket, begin, end,
-                                       [this](boost::system::error_code error,
-                                              boost::asio::ip::tcp::resolver::iterator endpoint) {
-                                           handleSocketConnection(error, endpoint);
-                                       });
+            boost::asio::async_connect(*socket, begin, end, [this](auto error, auto endpoint) {
+                onSocketConnectionAttemptCompleted(error, endpoint);
+            });
         }
 
         /**
@@ -119,16 +148,23 @@ namespace Device {
          * @param error
          * @param endpoint_iter
          */
-        void handleSocketConnection(boost::system::error_code error,
-                                    const boost::asio::ip::tcp::resolver::iterator &endpoint);
+        void onSocketConnectionAttemptCompleted(boost::system::error_code error,
+                                                const boost::asio::ip::tcp::resolver::iterator &endpoint);
 
         /**
          *
          * @param error
          * @param byteTransferred
          */
-        void handleBytesReception(const boost::system::error_code &error, unsigned int byteTransferred);
+        void onBytesReceived(const boost::system::error_code &error, unsigned int byteTransferred);
 
+        /**
+         *
+         * @tparam Iterator
+         * @param begin
+         * @param end
+         * @return
+         */
         template<typename Iterator>
         auto insertByteRangeIntoExtractionBuffer(Iterator begin, Iterator end) {
             extractionByteBuffer.insert(std::cend(extractionByteBuffer), begin, end);
@@ -170,9 +206,10 @@ namespace Device {
                 position = std::get<1>(extractionResult);
                 numberOfMissingBytes = std::get<2>(extractionResult);
                 if (scanFactory.isComplete()) {
-                    const auto bufferSizeNeededToContainAFullScan{computeBoundedRequiredBufferSize(scanFactory)};
+                    const auto bufferSizeNeededToContainAFullScan{
+                            computeBoundedRequiredBufferSizeToHostAFullScan(scanFactory)};
                     resizeReceptionBuffer(bufferSizeNeededToContainAFullScan);
-                    setOutputScanFromCompletedFactory(scanFactory);
+                    setOutputScanFromCompletedFactory(*scanFactory);
                 }
                 if (!hadEnoughBytes)
                     break;
@@ -202,7 +239,7 @@ namespace Device {
          * @return
          */
         [[nodiscard]] static inline unsigned int
-        computeBoundedRequiredBufferSize(const ScanFactory &scanFactory) {
+        computeBoundedRequiredBufferSizeToHostAFullScan(const ScanFactory &scanFactory) {
             std::vector<Data::Header> headers{};
             scanFactory.getHeaders(headers);
             auto byteSize{0u};
@@ -212,7 +249,6 @@ namespace Device {
         }
 
     private:
-        std::future<void> socketConnectionTask{};
         boost::asio::io_service ioService{};
         std::unique_ptr<boost::asio::ip::tcp::socket> socket{nullptr};
         internals::Types::Buffer receptionByteBuffer{};

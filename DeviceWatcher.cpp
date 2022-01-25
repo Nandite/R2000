@@ -112,7 +112,6 @@ int main(int argc, char **argv) {
     const auto outputPath{programOptions["output"].as<std::string>()};
     const auto device{Device::R2000::makeShared({"R2000", deviceAddress})};
 
-
     Device::Commands::GetProtocolVersionCommand getProtocolVersion{*device};
     auto future{getProtocolVersion.asyncExecute(3s)};
     future.wait();
@@ -122,25 +121,25 @@ int main(int argc, char **argv) {
                   << std::endl;
     }
     auto deviceVersion{result.second};
-
-    std::unique_ptr<Device::StatusWatcher<std::chrono::seconds>> statusWatcher{nullptr};
+    const auto period{1s};
+    std::unique_ptr<Device::StatusWatcher> statusWatcher{nullptr};
     if (outputPath.empty()) {
-        statusWatcher = std::make_unique<Device::StatusWatcher<std::chrono::seconds>>(
-                device, 10s, [&device, deviceVersion](const Device::DeviceStatus &status) -> void {
-                    const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
-                    std::cout << statusAsString << std::endl;
-                }
-        );
+        auto onStatusReceived{[&device, deviceVersion](const Device::DeviceStatus &status) -> void {
+            const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
+            std::cout << statusAsString << std::endl;
+        }};
+        statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
+        statusWatcher->addCallback(onStatusReceived);
     } else {
-        statusWatcher = std::make_unique<Device::StatusWatcher<std::chrono::seconds>>(
-                device, 10s, [&device, &outputPath, deviceVersion](const Device::DeviceStatus &status) -> void {
-                    const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
-                    std::ofstream stream(outputPath, std::ios::trunc);
-                    if (!stream.is_open())
-                        return;
-                    stream << statusAsString << std::endl;
-                }
-        );
+        auto onStatusReceived{[&device, &outputPath, deviceVersion](const Device::DeviceStatus &status) -> void {
+            const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
+            std::ofstream stream(outputPath, std::ios::trunc);
+            if (!stream.is_open())
+                return;
+            stream << statusAsString << std::endl;
+        }};
+        statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
+        statusWatcher->addCallback(onStatusReceived);
     }
     std::this_thread::sleep_for(2s);
     if (!statusWatcher->isAlive()) {
