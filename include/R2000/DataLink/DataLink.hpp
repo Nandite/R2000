@@ -371,13 +371,13 @@ namespace Device {
     protected:
 
         /**
-         *
-         * @param iDevice
-         * @param iHandle
-         * @param timeout
+         * @param iDevice : The device to attach the DataLink to.
+         * @param iHandle : The device handle obtained from the device.
+         * @param connectionTimeout : Maximum time allowed for the command issued by DataLink to the device
+         * to initiate the scan.
          */
         DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle,
-                 std::chrono::milliseconds timeout);
+                 std::chrono::milliseconds connectionTimeout);
 
         /**
          * Watchdog task to keep alive the connection between the device and the host.

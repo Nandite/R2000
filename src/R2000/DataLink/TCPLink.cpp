@@ -11,14 +11,14 @@
 
 Device::TCPLink::TCPLink(std::shared_ptr<R2000> iDevice,
                          std::shared_ptr<DeviceHandle> iHandle) noexcept(false)
-        : DataLink(std::move(iDevice), std::move(iHandle), 1s),
+        : DataLink(std::move(iDevice), std::move(iHandle), 5s),
           socket(std::make_unique<boost::asio::ip::tcp::socket>(ioService)),
           receptionByteBuffer(DEFAULT_RECEPTION_BUFFER_SIZE, 0),
-          extractionByteBuffer(EXTRACTION_BUFFER_SIZE, 0) {
+          extractionByteBuffer(DEFAULT_EXTRACTION_BUFFER_SIZE, 0) {
     asynchronousResolveEndpoints();
     ioServiceTask = std::async(std::launch::async, [this]() {
         ioService.run();
-        std::cout << "TCPLink::Exiting io service task" << std::endl;
+        std::clog << device->getName() << "::TCPLink::Exiting io service task" << std::endl;
     });
 }
 
@@ -32,12 +32,12 @@ void Device::TCPLink::asynchronousResolveEndpoints() {
             asynchronousConnectSocket(std::begin(endPoints), std::end(endPoints));
         } else {
             if (error == boost::asio::error::operation_aborted) {
-                std::clog << "TCPLink::Cancelling endpoints resolution" << std::endl;
+                std::clog << device->getName() << "::TCPLink::Cancelling endpoints resolution" << std::endl;
                 return;
             }
-            std::unique_lock<LockType> interruptGuard{interruptAsyncOpsCvLock, std::adopt_lock};
-            interruptAsyncOpsCv.wait_for(interruptGuard, 10s, [this]() -> bool {
-                return interruptAsyncOpsFlag.load(std::memory_order_acquire);
+            std::unique_lock<LockType> interruptGuard{interruptSocketAsyncOpsCvLock, std::adopt_lock};
+            interruptSocketAsyncOpsCv.wait_for(interruptGuard, 10s, [this]() -> bool {
+                return interruptSocketAsyncOpsFlag.load(std::memory_order_acquire);
             });
             asynchronousResolveEndpoints();
         }
@@ -47,8 +47,8 @@ void Device::TCPLink::asynchronousResolveEndpoints() {
 void Device::TCPLink::onSocketConnectionAttemptCompleted(boost::system::error_code error,
                                                          const boost::asio::ip::tcp::resolver::iterator &endpoint) {
     if (!error) {
-        std::cout << "TCPLink::Connected to the device at endpoint (" << endpoint->endpoint() << ") / and service ("
-                  << endpoint->service_name() << ")" << std::endl;
+        std::cout << device->getName() << "::TCPLink::Connected to the device at endpoint (" << endpoint->endpoint()
+                  << ") / and service (" << endpoint->service_name() << ")" << std::endl;
         isConnected.store(true, std::memory_order_release);
         boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
                                 boost::asio::transfer_exactly(
@@ -58,34 +58,35 @@ void Device::TCPLink::onSocketConnectionAttemptCompleted(boost::system::error_co
                                 });
     } else if (error || endpoint == endPoints.end()) {
         if (error == boost::asio::error::operation_aborted) {
-            std::clog << "TCPLink::Cancelling socket connection to device" << std::endl;
+            std::clog << device->getName() << "::TCPLink::Cancelling socket connection to device" << std::endl;
             return;
         }
         isConnected.store(false, std::memory_order_release);
-        std::unique_lock<LockType> interruptGuard{interruptAsyncOpsCvLock, std::adopt_lock};
-        interruptAsyncOpsCv.wait_for(interruptGuard, 20s, [this]() -> bool {
-            return interruptAsyncOpsFlag.load(std::memory_order_acquire);
+        std::unique_lock<LockType> interruptGuard{interruptSocketAsyncOpsCvLock, std::adopt_lock};
+        interruptSocketAsyncOpsCv.wait_for(interruptGuard, 20s, [this]() -> bool {
+            return interruptSocketAsyncOpsFlag.load(std::memory_order_acquire);
         });
         asynchronousResolveEndpoints();
     }
 }
 
-void Device::TCPLink::onBytesReceived(const boost::system::error_code &error,
-                                      unsigned int byteTransferred) {
+void Device::TCPLink::onBytesReceived(const boost::system::error_code &error, unsigned int byteTransferred) {
     if (error) {
         if (error != boost::asio::error::operation_aborted) {
-            std::clog << "TCPLink::Network error (" << error.message() << ")" << std::endl;
+            std::clog << device->getName() << "::TCPLink::Network error (" << error.message() << ")" << std::endl;
         } else {
-            std::cout << "TCPLink::Cancelling operations on request." << std::endl;
+            std::clog << device->getName() << "::TCPLink::Cancelling operations on request." << std::endl;
         }
         isConnected.store(false, std::memory_order_release);
         return;
     }
     const auto begin{std::cbegin(receptionByteBuffer)};
     const auto end{std::next(begin, byteTransferred)};
-    const auto range{insertByteRangeIntoExtractionBuffer(begin, end)};
-    const auto extractionResult{tryExtractingScanFromByteRange(range.first, range.second)};
-    removeUsedByteRange(range.first, extractionResult.first, range.second);
+    insertByteRangeIntoExtractionBuffer(begin, end);
+    const auto extractionBegin{std::cbegin(extractionByteBuffer)};
+    const auto extractionEnd{std::cend(extractionByteBuffer)};
+    const auto extractionResult{tryExtractingScanFromByteRange(extractionBegin, extractionEnd)};
+    removeUsedByteRangeFromExtractionBuffer(extractionResult.first);
     boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
                             boost::asio::transfer_exactly(extractionResult.second),
                             [this](const auto &error, const auto byteTransferred) {
@@ -94,17 +95,31 @@ void Device::TCPLink::onBytesReceived(const boost::system::error_code &error,
 }
 
 Device::TCPLink::~TCPLink() {
-    if (!interruptAsyncOpsFlag.load(std::memory_order_acquire)) {
+    if (!interruptSocketAsyncOpsFlag.load(std::memory_order_acquire)) {
         {
-            std::unique_lock<LockType> guard(interruptAsyncOpsCvLock, std::adopt_lock);
-            interruptAsyncOpsFlag.store(true, std::memory_order_release);
-            interruptAsyncOpsCv.notify_one();
+            std::unique_lock<LockType> guard{interruptSocketAsyncOpsCvLock, std::adopt_lock};
+            interruptSocketAsyncOpsFlag.store(true, std::memory_order_release);
+            interruptSocketAsyncOpsCv.notify_one();
         }
     }
     resolver.cancel();
-    boost::system::error_code placeholder;
-    socket->shutdown(boost::asio::ip::tcp::socket::shutdown_receive, placeholder);
-    socket->close(placeholder);
+    {
+        boost::system::error_code error{};
+        socket->shutdown(boost::asio::ip::tcp::socket::shutdown_receive, error);
+        if (error) {
+            std::clog << device->getName() << "::TCPLink::An error has occurred on socket shutdown (" << error.message()
+                      << ")" << std::endl;
+        }
+    }
+    {
+        boost::system::error_code error{};
+        socket->close(error);
+        if (error) {
+            std::clog << device->getName() << "::TCPLink::An error has occurred on socket closure (" << error.message()
+                      << ")" << std::endl;
+        }
+    }
+
     if (!ioService.stopped()) {
         ioService.stop();
         ioServiceTask.wait();

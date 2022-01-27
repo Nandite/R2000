@@ -23,8 +23,10 @@
 
 namespace Device {
     class StatusFlagInterpreter {
-    public:
     private:
+        /**
+         * @param flags A 32-bits unsigned integer sequence of flags.
+         */
         explicit StatusFlagInterpreter(uint32_t flags);
 
     public:

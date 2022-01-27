@@ -9,43 +9,49 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <future>
 #include <list>
 #include <mutex>
-#include <future>
-#include <iostream>
 
-class Worker {
+class Worker
+{
 public:
     /**
      * Construct a new worker that can handle task asynchronously.
      * @param maxJob The maximum number of job to queue for execution.
      */
-    explicit Worker(const unsigned int maxJob = std::numeric_limits<unsigned int>::max())
-            : maxJob(maxJob) {
-        workingTask = std::async(std::launch::async, [&] {
-            for (; !interruptFlag.load(std::memory_order_acquire);) {
-                decltype(jobs) localJobQueue{};
+    explicit Worker(const unsigned int maxJob = std::numeric_limits<unsigned int>::max()) : maxJob(maxJob)
+    {
+        workingTask = std::async(
+            std::launch::async,
+            [&]
+            {
+                for (; !interruptFlag.load(std::memory_order_acquire);)
                 {
-                    std::unique_lock<std::mutex> guard{jobLock, std::adopt_lock};
-                    jobQueueCondition.wait(guard, [this] {
-                        return !jobs.empty() || interruptFlag.load(std::memory_order_acquire);
-                    });
-                    if (interruptFlag.load(std::memory_order_acquire))
-                        return;
-                    std::swap(jobs, localJobQueue);
+                    decltype(jobs) localJobQueue{};
+                    {
+                        std::unique_lock<std::mutex> guard{jobLock, std::adopt_lock};
+                        jobQueueCondition.wait(
+                            guard, [this] { return !jobs.empty() || interruptFlag.load(std::memory_order_acquire); });
+                        if (interruptFlag.load(std::memory_order_acquire))
+                            return;
+                        std::swap(jobs, localJobQueue);
+                    }
+                    for (auto& job : localJobQueue)
+                    {
+                        std::invoke(job);
+                    }
                 }
-                for (auto &job : localJobQueue) {
-                    std::invoke(job);
-                }
-            }
-        });
+            });
     }
 
     /**
      * Interrupt and wait for the worker to finish.
      */
-    virtual ~Worker() {
-        if (!interruptFlag.load(std::memory_order_acquire)) {
+    virtual ~Worker()
+    {
+        if (!interruptFlag.load(std::memory_order_acquire))
+        {
             {
                 std::unique_lock<std::mutex> guard{jobLock, std::adopt_lock};
                 interruptFlag.store(true, std::memory_order_release);
@@ -63,11 +69,12 @@ public:
      * @return True if the job has been queued for execution, False if the
      * maximum number of waiting job has been reached.
      */
-    template<typename... Args>
-    inline bool pushJob(Args &&... args) noexcept {
+    template <typename Fn, typename... Args> inline bool pushJob(Fn&& fn, Args&&... args) noexcept
+    {
         std::lock_guard<std::mutex> guard{jobLock};
-        if (jobs.size() <= maxJob) {
-            jobs.push_back(std::bind(std::forward<Args>(args)...));
+        if (jobs.size() <= maxJob)
+        {
+            jobs.push_back(std::bind(std::forward<Fn>(fn), std::forward<Args>(args)...));
             jobQueueCondition.notify_one();
             return true;
         }

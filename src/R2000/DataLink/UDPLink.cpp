@@ -21,26 +21,25 @@ Device::UDPLink::UDPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceH
     if (!socket->is_open()) {
         socket->open(listenEndpoint.protocol(), openError);
         if (openError) {
-            std::clog << "Could not open the socket to read from " << device->getHostname() << ":" << port << " with ("
+            std::clog << device->getName() << "::UDPLink::Could not open the socket to read from "
+                      << device->getHostname() << ":" << port << " with ("
                       << openError.message() << ")" << std::endl;
         }
     }
     boost::system::error_code optionError{};
     socket->template set_option(boost::asio::ip::udp::socket::reuse_address(true), optionError);
     if (optionError) {
-        std::clog << "Could not set the reuse option on the socket to read from " << device->getHostname() << ":"
-                  << port << " with ("
-                  << optionError.message() << ")" << std::endl;
+        std::clog << device->getName() << "::UDPLink::Could not set the reuse option on the socket to read from "
+                  << device->getHostname() << ":" << port << " with (" << optionError.message() << ")" << std::endl;
     }
     boost::system::error_code bindError{};
     socket->bind(listenEndpoint, bindError);
     if (bindError) {
-        std::clog << "Could not bind the socket to read from " << device->getHostname() << ":"
-                  << port << " with ("
-                  << bindError.message() << ")" << std::endl;
+        std::clog << device->getName() << "::UDPLink::Could not bind the socket to read from " << device->getHostname()
+                  << ":" << port << " with (" << bindError.message() << ")" << std::endl;
     }
     if (openError || optionError || bindError) {
-        std::clog << __func__ << ":: Could not setup the Udp socket." << std::endl;
+        std::clog << device->getName() << "::UDPLink::Could not setup the Udp socket." << std::endl;
         isConnected.store(false, std::memory_order_release);
     } else {
         isConnected.store(true, std::memory_order_release);
@@ -50,21 +49,28 @@ Device::UDPLink::UDPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceH
                                    });
         ioServiceTask = std::async(std::launch::async, [this]() {
             ioService.run();
+            std::clog << device->getName() << "::UDPLink::Exiting io service task" << std::endl;
         });
     }
 }
 
 void Device::UDPLink::onBytesReceived(const boost::system::error_code &error, unsigned int byteTransferred) {
     if (error) {
-        std::clog << __func__ << ":: Network error (" << error.message() << ")" << std::endl;
+        if (error != boost::asio::error::operation_aborted) {
+            std::clog << device->getName() << "::UDPLink::Network error (" << error.message() << ")" << std::endl;
+        } else {
+            std::clog << device->getName() << "::UDPLink::Cancelling operations on request." << std::endl;
+        }
         isConnected.store(false, std::memory_order_release);
         return;
     }
     const auto begin{std::cbegin(receptionByteBuffer)};
     const auto end{std::next(begin, byteTransferred)};
-    const auto range{insertByteRangeIntoExtractionBuffer(begin, end)};
-    auto position{tryExtractingScanFromByteRange(range.first, range.second)};
-    removeUsedByteRange(range.first, position, range.second);
+    insertByteRangeIntoExtractionBuffer(begin, end);
+    const auto extractionBegin{std::cbegin(extractionByteBuffer)};
+    const auto extractionEnd{std::cend(extractionByteBuffer)};
+    auto position{tryExtractingScanFromByteRange(extractionBegin, extractionEnd)};
+    removeUsedByteRangeFromExtractionBuffer(position);
     socket->async_receive_from(boost::asio::buffer(receptionByteBuffer), endPoint,
                                [this](const auto &error, const auto byteTransferred) {
                                    onBytesReceived(error, byteTransferred);
@@ -72,9 +78,22 @@ void Device::UDPLink::onBytesReceived(const boost::system::error_code &error, un
 }
 
 Device::UDPLink::~UDPLink() {
-    boost::system::error_code placeholder{};
-    socket->shutdown(boost::asio::ip::udp::socket::shutdown_receive, placeholder);
-    socket->close(placeholder);
+    {
+        boost::system::error_code error{};
+        socket->shutdown(boost::asio::ip::tcp::socket::shutdown_receive, error);
+        if (error) {
+            std::clog << device->getName() << "::UDPLink::An error has occurred on socket shutdown (" << error.message()
+                      << ")" << std::endl;
+        }
+    }
+    {
+        boost::system::error_code error{};
+        socket->close(error);
+        if (error) {
+            std::clog << device->getName() << "::UDPLink::An error has occurred on socket closure (" << error.message()
+                      << ")" << std::endl;
+        }
+    }
     if (!ioService.stopped()) {
         ioService.stop();
         ioServiceTask.wait();

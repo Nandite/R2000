@@ -9,10 +9,10 @@
 #include <R2000/Control/Commands.hpp>
 
 Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle,
-                           std::chrono::milliseconds timeout)
+                           std::chrono::milliseconds connectionTimeout)
         : device(std::move(iDevice)), deviceHandle(std::move(iHandle)) {
     if (!Device::Commands::StartScanCommand{*device}.asyncExecute(
-            *deviceHandle, timeout,
+            *deviceHandle, connectionTimeout,
             [&](const Commands::StartScanCommand::AsyncResultType &result) -> void {
                 if (result == AsyncRequestResult::SUCCESS) {
                     isConnected.store(true, std::memory_order_release);
