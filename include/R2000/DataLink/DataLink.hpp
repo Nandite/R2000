@@ -161,14 +161,14 @@ namespace Device {
         template<unsigned Type>
         struct PayloadExtractionFromByteRange {
             /**
-             * Always throws a Device::NotImplemented exception.
+             * Always throws a Device::NotImplementedException exception.
              * @tparam Iterator The type of iterator of the range.
              * @return Nothing, it throws.
              */
             template<typename Iterator>
             static inline Iterator retrievePayload(Iterator, Iterator, const unsigned int, std::vector<uint32_t> &,
                                                    std::vector<uint32_t> &) {
-                throw Device::NotImplemented("Unsupported type of packet payload: " + Type);
+                throw Device::NotImplementedException("Unsupported type of packet payload: " + Type);
             }
         };
 
@@ -381,9 +381,9 @@ namespace Device {
 
         /**
          * Watchdog task to keep alive the connection between the device and the host.
-         * @param period The period at which a keep alive signal is emitted.
+         * @param commandTimeout The commandTimeout at which a keep alive signal is emitted.
          */
-        void watchdogTask(std::chrono::seconds period);
+        void watchdogTask(std::chrono::seconds commandTimeout);
 
         /**
          * Search through a byte range and extract a complete scan packet, then store it into a ScanFactory.
@@ -482,20 +482,20 @@ namespace Device {
          * - The scan received. If the flag is False, an empty scan is set to this field.
          */
         template<typename Duration>
-        [[maybe_unused]] [[nodiscard]] inline std::pair<bool, Device::Data::Scan> waitForNextScan(Duration timeout) {
+        [[maybe_unused]] [[nodiscard]] inline std::optional<Device::Data::Scan> waitForNextScan(Duration timeout) {
             if (!isConnected.load(std::memory_order_acquire)) {
-                return {false, {}};
+                return std::nullopt;
             }
             std::unique_lock<LockType> guard{waitForScanLock, std::adopt_lock};
             const auto scanCountBeforeWaiting{scanCounter};
-            if (scanAvailableCv.template wait_for(guard, timeout, [this, &scanCountBeforeWaiting]() {
+            if (scanAvailableCv.template wait_for(guard, timeout, [&]() {
                 const auto scanCountWhileWaiting{scanCounter};
                 return interruptFlag.load(std::memory_order_acquire) ||
                        (scanCountBeforeWaiting != scanCountWhileWaiting);
             })) {
-                return {true, getLastScan()};
+                return {getLastScan()};
             }
-            return {false, {}};
+            return std::nullopt;
         }
 
         /**
@@ -504,7 +504,7 @@ namespace Device {
          * - A flag at True if the next scan has been received, False if the DataLink is being destroyed.
          * - The scan received. If the flag is False, an empty scan is set to this field.
          */
-        [[maybe_unused]] [[nodiscard]] virtual inline std::pair<bool, Device::Data::Scan> waitForNextScan() {
+        [[maybe_unused]] [[nodiscard]] virtual inline std::optional<Device::Data::Scan> waitForNextScan() {
             // Approximately 490293 years, should be sufficient as a long timeout ^^
             const auto aLongTimeout{std::chrono::hours{std::numeric_limits<uint32_t>::max()}};
             return waitForNextScan(aLongTimeout);

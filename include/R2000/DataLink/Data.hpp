@@ -35,12 +35,14 @@ namespace Device::Data {
         template<typename T, bool Advance>
         struct InterpretLittleEndianByteRange {
             /**
-             * Always throws a Device::NotImplemented exception.
+             * Always throws a NotImplementedException exception.
              * @tparam Iterator The type of iterator of the range.
              */
             template<typename Iterator>
             [[maybe_unused]] static inline void interpret(Iterator &, T &) noexcept(false) {
-                throw Device::NotImplemented("InterpretLittleEndianByteRange<T>::Not implemented.");
+                throw Device::NotImplementedException(
+                        {"InterpretLittleEndianByteRange<" + std::string(typeid(T).name()) +
+                         ">::Not implemented."});
             };
         };
 

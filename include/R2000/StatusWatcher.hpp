@@ -114,10 +114,11 @@ namespace Device {
     template<typename T>
     struct QuietCastOptionalHelper {
         /**
-         * @return Nothing, always throws std::system_error.
+         * @return Nothing, always throws NotImplementedException.
          */
         static inline T castQuietly(const std::optional<std::string> &) {
-            throw Device::NotImplemented("QuietCastOptionalHelper<T>::Not implemented.");
+            throw Device::NotImplementedException({"QuietCastOptionalHelper<" + std::string(typeid(T).name()) +
+                                                   ">::Not implemented."});
         };
     };
 

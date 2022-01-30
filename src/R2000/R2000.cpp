@@ -18,25 +18,28 @@ Device::R2000::makeShared(const Device::DeviceConfiguration &configuration) {
     return enableMakeShared(configuration);
 }
 
-std::pair<bool, Device::PropertyTree> Device::R2000::sendHttpCommand(const std::string &command,
-                                                                     const std::string &parameter,
-                                                                     std::string value) const noexcept(false) {
+std::optional<Device::PropertyTree> Device::R2000::sendHttpCommand(const std::string &command,
+                                                                   const std::string &parameter,
+                                                                   std::string value) const noexcept(false) {
     Parameters::ParametersMap parameters{};
     if (!parameter.empty())
         parameters[parameter] = std::move(value);
     return sendHttpCommand(command, parameters);
 }
 
-std::pair<bool, Device::PropertyTree> Device::R2000::sendHttpCommand(const std::string &command,
-                                                                     const Parameters::ParametersMap &parameters) const
+std::optional<Device::PropertyTree> Device::R2000::sendHttpCommand(const std::string &command,
+                                                                   const Parameters::ParametersMap &parameters) const
 noexcept(false) {
     auto request{"/cmd/" + command};
-    if (!parameters.empty())
+    if (!parameters.empty()) {
         request += "?";
-    for (const auto &parameter : parameters)
+    }
+    for (const auto &parameter : parameters) {
         request += parameter.first + "=" + parameter.second + "&";
-    if (request.back() == '&')
+    }
+    if (request.back() == '&') {
         request.pop_back();
+    }
     Device::PropertyTree propertyTree{};
     try {
         const auto result{HttpGet(request)};
@@ -45,15 +48,17 @@ noexcept(false) {
         std::stringstream stringStream{content};
         if (responseCode == 200) {
             boost::property_tree::json_parser::read_json(stringStream, propertyTree);
-            return {verifyErrorCode(propertyTree), std::move(propertyTree)};
-        } else {
-            return {false, {}};
+            if (verifyErrorCode(propertyTree)) {
+                return {std::move(propertyTree)};
+            }
+            return std::nullopt;
         }
     }
     catch (const std::system_error &error) {
-        std::clog << __func__ << ": Http request error : " << error.what() << " (" << error.code() << ")" << std::endl;
+        std::clog << getName() << "sendHttpCommand::Http request error : " << error.what() << " ("
+                  << error.code() << ")" << std::endl;
     }
-    return {false, {}};
+    return std::nullopt;
 }
 
 bool Device::R2000::asyncSendHttpCommand(const std::string &command, AsyncCommandCallback callable,
@@ -65,26 +70,25 @@ bool Device::R2000::asyncSendHttpCommand(const std::string &command, const Param
                                          AsyncCommandCallback callable,
                                          std::chrono::milliseconds timeout) noexcept(true) {
     const auto request{makeRequestFromParameters(command, parameters)};
-    auto onHttpGetComplete{
-            [callable = std::move(callable)](const HttpResult &httpResult) {
-                Device::PropertyTree propertyTree{};
-                const auto responseCode{std::get<0>(httpResult)};
-                if (responseCode != 200) {
-                    if (responseCode == 408) {
-                        std::invoke(callable, AsyncResult(AsyncRequestResult::TIMEOUT, Device::PropertyTree{}));
-                    } else {
-                        std::invoke(callable, AsyncResult(AsyncRequestResult::FAILED, Device::PropertyTree{}));
-                    }
-                } else {
-                    const auto content{std::get<2>(httpResult)};
-                    std::stringstream stringStream{content};
-                    boost::property_tree::json_parser::read_json(stringStream, propertyTree);
-                    const auto propertyTreeCode{verifyErrorCode(propertyTree)};
-                    AsyncRequestResult requestResult{propertyTreeCode ? AsyncRequestResult::SUCCESS
-                                                                      : AsyncRequestResult::FAILED};
-                    std::invoke(callable, AsyncResult(requestResult, propertyTree));
-                }
-            }};
+    auto onHttpGetComplete{[fn = std::move(callable)](const HttpResult &httpResult) {
+        Device::PropertyTree propertyTree{};
+        const auto responseCode{std::get<0>(httpResult)};
+        if (responseCode != 200) {
+            if (responseCode == 408) {
+                std::invoke(fn, AsyncResult(AsyncRequestResult::TIMEOUT, Device::PropertyTree{}));
+            } else {
+                std::invoke(fn, AsyncResult(AsyncRequestResult::FAILED, Device::PropertyTree{}));
+            }
+        } else {
+            const auto content{std::get<2>(httpResult)};
+            std::stringstream stringStream{content};
+            boost::property_tree::json_parser::read_json(stringStream, propertyTree);
+            const auto propertyTreeCode{verifyErrorCode(propertyTree)};
+            AsyncRequestResult requestResult{propertyTreeCode ? AsyncRequestResult::SUCCESS
+                                                              : AsyncRequestResult::FAILED};
+            std::invoke(fn, AsyncResult(requestResult, propertyTree));
+        }
+    }};
     return AsyncHttpGet(request, onHttpGetComplete, timeout);
 }
 
@@ -98,7 +102,7 @@ Device::R2000::HttpResult Device::R2000::HttpGet(boost::asio::ip::tcp::socket &s
         boost::system::error_code error{boost::asio::error::host_not_found};
         boost::asio::write(socket, request, error);
         if (error) {
-            throw std::system_error(error);
+            throw std::system_error{error};
         }
     }
     boost::asio::streambuf response{};
@@ -106,7 +110,7 @@ Device::R2000::HttpResult Device::R2000::HttpGet(boost::asio::ip::tcp::socket &s
         boost::system::error_code error{boost::asio::error::host_not_found};
         boost::asio::read_until(socket, response, "\r\n", error);
         if (error) {
-            throw std::system_error(error);
+            throw std::system_error{error};
         }
     }
 
@@ -115,11 +119,11 @@ Device::R2000::HttpResult Device::R2000::HttpGet(boost::asio::ip::tcp::socket &s
     responseStream >> httpVersion;
     auto statusCode{0};
     responseStream >> statusCode;
-    std::string status_message{};
-    std::getline(responseStream, status_message);
+    std::string statusMessage{};
+    std::getline(responseStream, statusMessage);
     if (!responseStream || httpVersion.substr(0, 5) != "HTTP/") {
-        std::clog << "Invalid response" << std::endl;
-        return {0, "", ""};
+        std::clog << "HttpGet::Invalid response" << std::endl;
+        return {0, {}, {}};
     }
 
     {
@@ -127,7 +131,7 @@ Device::R2000::HttpResult Device::R2000::HttpGet(boost::asio::ip::tcp::socket &s
         // Read the response headers, which are terminated by a blank line.
         boost::asio::read_until(socket, response, "\r\n\r\n", error);
         if (error) {
-            throw std::system_error(error);
+            throw std::system_error{error};
         }
     }
 
@@ -147,7 +151,7 @@ Device::R2000::HttpResult Device::R2000::HttpGet(boost::asio::ip::tcp::socket &s
         }
     }
     if (error != boost::asio::error::eof) {
-        throw std::system_error(error);
+        throw std::system_error{error};
     }
 
     for (auto &character : header) {
@@ -164,10 +168,8 @@ Device::R2000::HttpResult Device::R2000::HttpGet(boost::asio::ip::tcp::socket &s
 }
 
 Device::R2000::HttpResult Device::R2000::HttpGet(const std::string &requestPath) const noexcept(false) {
-    const auto deviceAddress{configuration.deviceAddress.to_string()};
-    const auto port{std::to_string(configuration.httpServicePort)};
     boost::asio::ip::tcp::resolver resolver{ioService};
-    boost::asio::ip::tcp::resolver::query query{deviceAddress, port};
+    const auto query{getDeviceQuery()};
     auto endpointIterator{resolver.resolve(query)};
     boost::asio::ip::tcp::resolver::iterator endpointEndIterator{};
     internals::SocketGuard<boost::asio::ip::tcp::socket> socketGuard{ioService};
@@ -181,7 +183,7 @@ Device::R2000::HttpResult Device::R2000::HttpGet(const std::string &requestPath)
             socket.connect(*endpointIterator++, error);
         }
         if (error) {
-            throw std::system_error(error);
+            throw std::system_error{error};
         }
     }
 
@@ -190,20 +192,20 @@ Device::R2000::HttpResult Device::R2000::HttpGet(const std::string &requestPath)
 
 bool Device::R2000::AsyncHttpGet(const std::string &request, HttpGetCallback callable,
                                  std::chrono::milliseconds timeout) noexcept(true) {
-    auto asyncWorkerJob{[this, request, timeout, callable = std::move(callable)]() {
+    auto asyncWorkerJob{[&, request, timeout, fn = std::move(callable)]() {
         if (deviceEndpoints) {
-            onEndpointResolutionAttemptCompleted(boost::system::error_code{}, request, callable,
+            onEndpointResolutionAttemptCompleted(boost::system::error_code{}, request, fn,
                                                  *deviceEndpoints, timeout);
         } else {
             const auto query{getDeviceQuery()};
-            auto resolverHandler{[this, request, callable, timeout](const auto &error, auto queriedEndpoints) {
+            auto resolverHandler{[&, request, fn, timeout](const auto &error, auto queriedEndpoints) {
                 deviceEndpoints = std::move(queriedEndpoints);
-                onEndpointResolutionAttemptCompleted(error, request, callable, *deviceEndpoints, timeout);
+                onEndpointResolutionAttemptCompleted(error, request, fn, *deviceEndpoints, timeout);
             }};
             asyncResolver.async_resolve(query, resolverHandler);
             scheduleEndpointResolverNextDeadline(timeout);
         }
-        std::unique_lock<std::mutex> guard(ioServiceLock, std::adopt_lock);
+        std::unique_lock<std::mutex> guard{ioServiceLock, std::adopt_lock};
         ioServiceTaskCv.notify_one();
     }};
     return worker.pushJob(asyncWorkerJob);
@@ -212,25 +214,25 @@ bool Device::R2000::AsyncHttpGet(const std::string &request, HttpGetCallback cal
 void
 Device::R2000::onEndpointResolutionAttemptCompleted(const boost::system::error_code &error, const std::string &request,
                                                     HttpGetCallback callable,
-                                                    boost::asio::ip::tcp::resolver::results_type &endpoints,
+                                                    const boost::asio::ip::tcp::resolver::results_type &endpoints,
                                                     std::chrono::milliseconds timeout) {
-    boost::system::error_code placeholder;
+    boost::system::error_code placeholder{};
     resolverDeadline.cancel(placeholder);
     if (!error) {
         const auto endpointsBegin{std::cbegin(endpoints)};
         const auto endpointsEnd{std::cend(endpoints)};
         asyncSocket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, placeholder);
         asyncSocket.close(placeholder);
-        auto socketConnectionHandler{[this, request, callable = std::move(callable)](auto error, const auto &) {
-            onSocketConnectionAttemptCompleted(error, request, callable);
+        auto handleSocketConnectionAttempt{[&, request, fn = std::move(callable)](auto error, const auto &) {
+            onSocketConnectionAttemptCompleted(error, request, fn);
         }};
-        boost::asio::async_connect(asyncSocket, endpointsBegin, endpointsEnd, socketConnectionHandler);
+        boost::asio::async_connect(asyncSocket, endpointsBegin, endpointsEnd, handleSocketConnectionAttempt);
         scheduleSocketConnectionNextDeadline(timeout);
     } else {
         if (error == boost::asio::error::operation_aborted) {
-            std::clog << "R2000::" << configuration.name << "::Endpoints resolution timeout" << std::endl;
+            std::clog << configuration.name << "::Endpoints resolution timeout" << std::endl;
         } else {
-            std::clog << "R2000::" << configuration.name << "::Network error while resolving endpoints ("
+            std::clog << configuration.name << "::Network error while resolving endpoints ("
                       << error.message() << ")" << std::endl;
         }
         std::invoke(callable, std::make_tuple(0, std::string{}, std::string{}));
@@ -240,17 +242,17 @@ Device::R2000::onEndpointResolutionAttemptCompleted(const boost::system::error_c
 void
 Device::R2000::onSocketConnectionAttemptCompleted(const boost::system::error_code &error, const std::string &request,
                                                   const HttpGetCallback &callable) {
-    boost::system::error_code placeholder;
+    boost::system::error_code placeholder{};
     socketDeadline.cancel(placeholder);
     if (!error) {
         const auto result{HttpGet(asyncSocket, request)};
         std::invoke(callable, result);
     } else {
         if (error == boost::asio::error::operation_aborted) {
-            std::clog << "R2000::" << configuration.name << "::Socket connection timout" << std::endl;
+            std::clog << configuration.name << "::Socket connection timout" << std::endl;
             std::invoke(callable, std::make_tuple(408, std::string{}, std::string{}));
         } else {
-            std::clog << "R2000::" << configuration.name << "::Network error while connecting to the device ("
+            std::clog << configuration.name << "::Network error while connecting to the device ("
                       << error.message() << ")" << std::endl;
             std::invoke(callable, std::make_tuple(0, std::string{}, std::string{}));
         }
@@ -266,13 +268,13 @@ bool Device::R2000::verifyErrorCode(const Device::PropertyTree &tree) {
 void Device::R2000::scheduleEndpointResolverNextDeadline(std::chrono::milliseconds timeout) {
     resolverDeadline.expires_from_now(
             boost::asio::chrono::milliseconds(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count()));
-    resolverDeadline.async_wait([this](const boost::system::error_code &) { onEndpointResolutionDeadlineReached(); });
+    resolverDeadline.async_wait([&](const auto &) { onEndpointResolutionDeadlineReached(); });
 }
 
 void Device::R2000::scheduleSocketConnectionNextDeadline(std::chrono::milliseconds timeout) {
     socketDeadline.expires_from_now(
             boost::asio::chrono::milliseconds(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count()));
-    socketDeadline.async_wait([this](const boost::system::error_code &) { onSocketConnectionDeadlineReached(); });
+    socketDeadline.async_wait([&](const auto &) { onSocketConnectionDeadlineReached(); });
 }
 
 void Device::R2000::onEndpointResolutionDeadlineReached() {
@@ -292,14 +294,14 @@ void Device::R2000::onSocketConnectionDeadlineReached() {
 }
 
 Device::R2000::~R2000() {
-    boost::system::error_code placeholder;
+    boost::system::error_code placeholder{};
     resolverDeadline.cancel(placeholder);
     socketDeadline.cancel(placeholder);
     asyncResolver.cancel();
     asyncSocket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, placeholder);
     asyncSocket.close(placeholder);
     {
-        std::unique_lock<std::mutex> guard(ioServiceLock, std::adopt_lock);
+        std::unique_lock<std::mutex> guard{ioServiceLock, std::adopt_lock};
         interruptIoServiceTask.store(true, std::memory_order_release);
         ioService.stop();
         ioServiceTaskCv.notify_one();

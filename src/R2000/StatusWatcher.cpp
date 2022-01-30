@@ -23,15 +23,15 @@ void Device::StatusWatcher::statusWatcherTask() {
         auto future{getParametersCommand.asyncExecuteFuture(1s, systemStatus)};
         if (!future) {
             std::clog << "StatusWatcher::" << device->getName()
-                      << "::Could not request to get parameters from the device." << std::endl;
+                      << "::Could not request get the parameters from the device." << std::endl;
         } else {
             future->wait();
             auto result{future->get()};
             const auto requestResult{result.first};
-            const auto hasSucceed{requestResult == AsyncRequestResult::SUCCESS};
-            const auto values{result.second};
-            if (hasSucceed && values) {
-                const auto status{DeviceStatus{*values}};
+            const auto requestHasSucceed{requestResult == AsyncRequestResult::SUCCESS};
+            const auto parameters{result.second};
+            if (requestHasSucceed && parameters) {
+                const auto status{DeviceStatus{*parameters}};
                 isConnected.store(true, std::memory_order_release);
                 {
                     RealtimeStatus::ScopedAccess <farbot::ThreadType::realtime> scanGuard(*realtimeStatus);
@@ -49,7 +49,7 @@ void Device::StatusWatcher::statusWatcherTask() {
         }
         std::unique_lock<LockType> interruptGuard{interruptCvLock, std::adopt_lock};
         interruptCv.wait_for(interruptGuard, period,
-                             [this]() -> bool { return interruptFlag.load(std::memory_order_acquire); });
+                             [&]() { return interruptFlag.load(std::memory_order_acquire); });
     }
 }
 

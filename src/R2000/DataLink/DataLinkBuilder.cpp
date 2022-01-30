@@ -21,13 +21,13 @@ Device::DataLinkBuilder::DataLinkBuilder(const Parameters::ReadWriteParameters::
 
 std::shared_ptr<Device::DataLink>
 Device::DataLinkBuilder::build(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
-    return syncBuildAndPotentiallyThrow(device);
+    return constructDataLink(device);
 }
 
 std::future<Device::DataLinkBuilder::AsyncBuildResult>
 Device::DataLinkBuilder::build(const std::shared_ptr<Device::R2000> &device,
                                std::chrono::milliseconds timeout) noexcept(false) {
-    return asyncBuildAndPotentiallyThrow(device, timeout);
+    return constructDataLink(device, timeout);
 }
 
 std::pair<bool, std::chrono::milliseconds>
@@ -86,7 +86,7 @@ Device::DataLinkBuilder::makeUdpDeviceHandle(const Commands::RequestUdpHandleCom
 }
 
 std::shared_ptr<Device::DataLink>
-Device::DataLinkBuilder::syncBuildAndPotentiallyThrow(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
+Device::DataLinkBuilder::constructDataLink(const std::shared_ptr<Device::R2000> &device) noexcept(false) {
     const auto protocol{internals::castAnyOrThrow<Device::PROTOCOL>(requirements.get("protocol"), "")};
     switch (protocol) {
         case PROTOCOL::TCP: {
@@ -115,8 +115,8 @@ Device::DataLinkBuilder::syncBuildAndPotentiallyThrow(const std::shared_ptr<Devi
 }
 
 std::future<Device::DataLinkBuilder::AsyncBuildResult>
-Device::DataLinkBuilder::asyncBuildAndPotentiallyThrow(const std::shared_ptr<Device::R2000> &device,
-                                                       std::chrono::milliseconds timeout) noexcept(true) {
+Device::DataLinkBuilder::constructDataLink(const std::shared_ptr<Device::R2000> &device,
+                                           std::chrono::milliseconds timeout) noexcept(true) {
     auto promise{std::make_shared<std::promise<AsyncBuildResult>>()};
     const auto protocol{internals::castAnyOrThrow<Device::PROTOCOL>(requirements.get("protocol"), "")};
     switch (protocol) {
@@ -140,7 +140,7 @@ Device::DataLinkBuilder::asyncBuildAndPotentiallyThrow(const std::shared_ptr<Dev
                 promise->set_value(AsyncBuildResult{AsyncRequestResult::FAILED, nullptr});
             break;
         }
-        case PROTOCOL::UDP:
+        case PROTOCOL::UDP: {
             const auto params{extractUdpDataLinkParameters(requirements)};
             const auto &builder{std::get<0>(params)};
             const auto launched{Device::Commands::RequestUdpHandleCommand{*device}.asyncExecute(
@@ -162,6 +162,7 @@ Device::DataLinkBuilder::asyncBuildAndPotentiallyThrow(const std::shared_ptr<Dev
             if (!launched)
                 promise->set_value(AsyncBuildResult{AsyncRequestResult::FAILED, nullptr});
             break;
+        }
     }
     return promise->get_future();
 }

@@ -15,9 +15,18 @@
 using namespace std::chrono_literals;
 
 namespace Device {
-    class builder_exception : public std::invalid_argument {
+
+    class R2000;
+
+    class DataLink;
+
+    class DeviceHandle;
+
+    enum class AsyncRequestResult;
+
+    class builderException : public std::invalid_argument {
     public:
-        explicit builder_exception(const std::string &what) : std::invalid_argument(what) {};
+        explicit builderException(const std::string &what) : std::invalid_argument(what) {};
     };
     namespace internals {
         /**
@@ -63,7 +72,7 @@ namespace Device {
         template<typename T>
         inline auto castAnyOrThrow(const std::any &any, const std::string &throwMessage) noexcept(false) {
             if (!any.has_value())
-                throw builder_exception(std::string(__func__) + ":: Any is empty -> " + throwMessage);
+                throw builderException("Any is empty -> " + throwMessage);
             return std::any_cast<T>(any);
         }
 
@@ -78,7 +87,7 @@ namespace Device {
                                      const std::string &throwMessage) noexcept(false)
         -> const Parameters::ParametersMap::mapped_type & {
             if (!map.count(key))
-                throw builder_exception(std::string(__func__) + " : Key not found -> " + throwMessage);
+                throw builderException("Key not found -> " + throwMessage);
             return map.at(key);
         }
 
@@ -98,11 +107,6 @@ namespace Device {
         }
 
     } // namespace internals
-
-    class R2000;
-    class DataLink;
-    class DeviceHandle;
-    enum class AsyncRequestResult;
 
     class DataLinkBuilder {
     private:
@@ -211,7 +215,7 @@ namespace Device {
          * @return A shared pointer containing the DataLink or nullptr if the link could not be established.
          */
         std::shared_ptr<DataLink>
-        syncBuildAndPotentiallyThrow(const std::shared_ptr<Device::R2000> &device) noexcept(false);
+        constructDataLink(const std::shared_ptr<Device::R2000> &device) noexcept(false);
 
         /**
          * Asynchronously request a data stream to the device and construct a DataLink to handle it.
@@ -220,8 +224,8 @@ namespace Device {
          * @return a future that contains the result of the request and a DataLink (or nullptr if the link could not
          * be established).
          */
-        std::future<AsyncBuildResult> asyncBuildAndPotentiallyThrow(const std::shared_ptr<Device::R2000> &device,
-                                                                    std::chrono::milliseconds timeout) noexcept(true);
+        std::future<AsyncBuildResult> constructDataLink(const std::shared_ptr<Device::R2000> &device,
+                                                        std::chrono::milliseconds timeout) noexcept(true);
 
     private:
         internals::Requirements<std::string> requirements{};

@@ -13,8 +13,10 @@ Device::TCPLink::TCPLink(std::shared_ptr<R2000> iDevice,
                          std::shared_ptr<DeviceHandle> iHandle) noexcept(false)
         : DataLink(std::move(iDevice), std::move(iHandle), 5s),
           socket(std::make_unique<boost::asio::ip::tcp::socket>(ioService)),
-          receptionByteBuffer(DEFAULT_RECEPTION_BUFFER_SIZE, 0),
-          extractionByteBuffer(DEFAULT_EXTRACTION_BUFFER_SIZE, 0) {
+          receptionByteBuffer(DEFAULT_RECEPTION_BUFFER_SIZE, 0)//,
+          //extractionByteBuffer(DEFAULT_EXTRACTION_BUFFER_SIZE, 0)
+          {
+    extractionByteBuffer.reserve(DEFAULT_EXTRACTION_BUFFER_SIZE);
     asynchronousResolveEndpoints();
     ioServiceTask = std::async(std::launch::async, [this]() {
         ioService.run();
@@ -53,7 +55,7 @@ void Device::TCPLink::onSocketConnectionAttemptCompleted(boost::system::error_co
         boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
                                 boost::asio::transfer_exactly(
                                         DEFAULT_RECEPTION_BUFFER_SIZE),
-                                [this](const auto &error, const auto byteTransferred) {
+                                [&](const auto &error, const auto byteTransferred) {
                                     onBytesReceived(error, byteTransferred);
                                 });
     } else if (error || endpoint == endPoints.end()) {
@@ -80,16 +82,19 @@ void Device::TCPLink::onBytesReceived(const boost::system::error_code &error, un
         isConnected.store(false, std::memory_order_release);
         return;
     }
+    std::cout << "Transferred " << byteTransferred << " byte(s)"<< std::endl;
+    std::cout << "Reception buffer size/capacity : " << receptionByteBuffer.size() << "/"
+              << receptionByteBuffer.capacity() << std::endl;
     const auto begin{std::cbegin(receptionByteBuffer)};
     const auto end{std::next(begin, byteTransferred)};
     insertByteRangeIntoExtractionBuffer(begin, end);
-    const auto extractionBegin{std::cbegin(extractionByteBuffer)};
-    const auto extractionEnd{std::cend(extractionByteBuffer)};
-    const auto extractionResult{tryExtractingScanFromByteRange(extractionBegin, extractionEnd)};
-    removeUsedByteRangeFromExtractionBuffer(extractionResult.first);
+    const auto from{std::cbegin(extractionByteBuffer)};
+    const auto to{std::cend(extractionByteBuffer)};
+    const auto until{tryExtractingScanFromByteRange(from, to)};
+    removeUsedByteRangeFromExtractionBuffer(until.first);
     boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
-                            boost::asio::transfer_exactly(extractionResult.second),
-                            [this](const auto &error, const auto byteTransferred) {
+                            boost::asio::transfer_exactly(until.second),
+                            [&](const auto &error, const auto byteTransferred) {
                                 onBytesReceived(error, byteTransferred);
                             });
 }

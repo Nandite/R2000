@@ -13,20 +13,20 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<Devic
         : device(std::move(iDevice)), deviceHandle(std::move(iHandle)) {
     if (!Device::Commands::StartScanCommand{*device}.asyncExecute(
             *deviceHandle, connectionTimeout,
-            [&](const Commands::StartScanCommand::AsyncResultType &result) -> void {
+            [&](const auto &result) -> void {
                 if (result == AsyncRequestResult::SUCCESS) {
                     isConnected.store(true, std::memory_order_release);
                     if (deviceHandle->isWatchdogEnabled()) {
                         watchdogTaskFuture = std::async(std::launch::async, &DataLink::watchdogTask, this, 1s);
                     }
                 } else {
-                    std::clog << "DataLink::Could not request the device to start the stream ("
+                    std::clog << device->getName() << "::DataLink::Could not request the device to start the stream ("
                               << asyncResultToString(result) << ")" << std::endl;
                     isConnected.store(false, std::memory_order_release);
                 }
             })) {
         isConnected.store(false, std::memory_order_release);
-        std::clog << "DataLink::Could not request the device to start the stream." << std::endl;
+        std::clog << device->getName() << "::DataLink::Could not request the device to start the stream." << std::endl;
         return;
     }
 }
@@ -39,24 +39,29 @@ Device::DataLink::~DataLink() {
             interruptCv.notify_one();
         }
         scanAvailableCv.notify_all();
-        if (watchdogTaskFuture)
+        if (watchdogTaskFuture) {
             watchdogTaskFuture->wait();
+        }
 
         auto stopScanFuture{Device::Commands::StopScanCommand{*device}.asyncExecute(*deviceHandle, 1s)};
         if (stopScanFuture) {
             stopScanFuture->wait();
             const auto result{stopScanFuture->get()};
-            if (result != AsyncRequestResult::SUCCESS)
-                std::clog << __func__ << ": Could not stop the data stream (" << asyncResultToString(result) << ")"
+            if (result != AsyncRequestResult::SUCCESS) {
+                std::clog << device->getName() << "::DataLink::Could not stop the data stream ("
+                          << asyncResultToString(result) << ")"
                           << std::endl;
+            }
         }
         auto releaseHandleFuture{Device::Commands::ReleaseHandleCommand{*device}.asyncExecute(*deviceHandle, 1s)};
         if (releaseHandleFuture) {
             releaseHandleFuture->wait();
             const auto result{releaseHandleFuture->get()};
-            if (result != AsyncRequestResult::SUCCESS)
-                std::clog << __func__ << ": Could not release the handle (" << asyncResultToString(result) << ")"
+            if (result != AsyncRequestResult::SUCCESS) {
+                std::clog << device->getName() << "::DataLink::Could not release the handle ("
+                          << asyncResultToString(result) << ")"
                           << std::endl;
+            }
         }
     }
 }
@@ -65,13 +70,13 @@ bool Device::DataLink::isAlive() const noexcept {
     return isConnected.load(std::memory_order_acquire);
 }
 
-void Device::DataLink::watchdogTask(std::chrono::seconds period) {
+void Device::DataLink::watchdogTask(std::chrono::seconds commandTimeout) {
     const auto threadName{device->getName() + ".Watchdog"};
     pthread_setname_np(pthread_self(), threadName.c_str());
     Device::Commands::FeedWatchdogCommand feedWatchdogCommand{*device};
     const auto watchdogTimeout{deviceHandle->getWatchdogTimeout()};
     for (; !interruptFlag.load(std::memory_order_acquire);) {
-        auto future{feedWatchdogCommand.asyncExecute(*deviceHandle, period)};
+        auto future{feedWatchdogCommand.asyncExecute(*deviceHandle, commandTimeout)};
         if (!future) {
             isConnected.store(false, std::memory_order_release);
         }

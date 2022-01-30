@@ -184,9 +184,9 @@ namespace Device {
          * @return A pair containing as first a flag indicating either or not the command has been successfully sent
          * and a reply received. The second of the pair is a property tree representing the content of the Http answer.
          */
-        [[nodiscard]] std::pair<bool, Device::PropertyTree> sendHttpCommand(const std::string &command,
-                                                                            const std::string &parameter = "",
-                                                                            std::string value = "") const noexcept(false);
+        [[nodiscard]] std::optional<Device::PropertyTree> sendHttpCommand(const std::string &command,
+                                                                          const std::string &parameter = "",
+                                                                          std::string value = "") const noexcept(false);
 
         /**
          * Send a HTTP Command with several parameters and their corresponding value to the device.
@@ -195,8 +195,8 @@ namespace Device {
          * @return A pair containing as first a flag indicating either or not the command has been successfully sent
          * and a reply received. The second of the pair is a property tree representing the content of the Http answer.
          */
-        [[nodiscard]] std::pair<bool, Device::PropertyTree> sendHttpCommand(const std::string &command,
-                                                                            const Parameters::ParametersMap &parameters) const
+        [[nodiscard]] std::optional<Device::PropertyTree> sendHttpCommand(const std::string &command,
+                                                                          const Parameters::ParametersMap &parameters) const
         noexcept(false);
 
         /**
@@ -207,7 +207,7 @@ namespace Device {
          * @return True if the request has been submitted, false if the requests queue is full.
          */
         bool asyncSendHttpCommand(const std::string &command, AsyncCommandCallback callable,
-                                  std::chrono::milliseconds timeout) noexcept(true);
+                                  std::chrono::milliseconds timeout = 5000ms) noexcept(true);
 
         /**
          * Asynchronously send a HTTP Command with several parameters and their corresponding value to the device.
@@ -287,7 +287,7 @@ namespace Device {
          */
         void onEndpointResolutionAttemptCompleted(const boost::system::error_code &error, const std::string &request,
                                                   HttpGetCallback callable,
-                                                  boost::asio::ip::tcp::resolver::results_type &endpoints,
+                                                  const boost::asio::ip::tcp::resolver::results_type &endpoints,
                                                   std::chrono::milliseconds timeout);
 
         /**

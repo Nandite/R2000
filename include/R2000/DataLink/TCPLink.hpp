@@ -147,7 +147,7 @@ namespace Device {
             boost::system::error_code placeholder{};
             socket->shutdown(boost::asio::ip::tcp::socket::shutdown_both, placeholder);
             socket->close(placeholder);
-            boost::asio::async_connect(*socket, begin, end, [this](auto error, auto endpoint) {
+            boost::asio::async_connect(*socket, begin, end, [&](auto error, auto endpoint) {
                 onSocketConnectionAttemptCompleted(error, endpoint);
             });
         }
@@ -180,21 +180,34 @@ namespace Device {
          * @param end The end of the byte range to insert.
          */
         template<typename Iterator>
-        inline void insertByteRangeIntoExtractionBuffer(Iterator begin, Iterator end) noexcept {
+        auto insertByteRangeIntoExtractionBuffer(Iterator begin, Iterator end) {
+            const auto numberOfElements{std::distance(begin,end)};
+            std::cout << "Inserting " << numberOfElements << " byte(s)" << std::endl;
+            std::cout << "Before insertion : " << extractionByteBuffer.size() << std::endl;
             extractionByteBuffer.insert(std::cend(extractionByteBuffer), begin, end);
+            std::cout << "After insertion : " << extractionByteBuffer.size() << std::endl;
+            //std::copy(begin, end, std::back_inserter(extractionByteBuffer));
+            return std::make_pair(std::cbegin(extractionByteBuffer),
+                                  std::cend(extractionByteBuffer));
         }
 
         /**
          * Remove a range of byte from the extraction buffer between the start of the range and a position within
          * the buffer. If the position is equals to end, the buffer is cleared.
          * @tparam Iterator Iterator must  meet the requirements of MoveAssignable.
+         * @param begin Beginning of the range within the extraction buffer to remove.
          * @param position Position within the extraction buffer until which to remove the bytes.
+         * @param end End of the range of the extraction buffer to.
          */
         template<typename Iterator>
         void removeUsedByteRangeFromExtractionBuffer(Iterator position) noexcept {
             const auto remainingBytes{std::distance(position, std::cend(extractionByteBuffer))};
             if (remainingBytes) {
+                const auto removedBytes{std::distance(std::cbegin(extractionByteBuffer), position)};
+                std::cout << "Removing/Leaving " << removedBytes << "/" << remainingBytes << " byte(s)" << std::endl;
+                std::cout << "Before removal : " << extractionByteBuffer.size() << std::endl;
                 extractionByteBuffer.erase(std::cbegin(extractionByteBuffer), position);
+                std::cout << "After removal : " << extractionByteBuffer.size() << std::endl;
             } else {
                 extractionByteBuffer.clear();
             }
@@ -228,9 +241,13 @@ namespace Device {
                             computeBoundedRequiredBufferSizeToHostAFullScan(scanFactory)};
                     resizeReceptionBuffer(bufferSizeNeededToContainAFullScan);
                     setOutputScanFromCompletedFactory(*scanFactory);
+                    std::cout << "Extracted complete scan" << std::endl;
                 }
-                if (!hadEnoughBytes)
+                if (!hadEnoughBytes) {
+                    std::cout << "Need more bytes" << std::endl;
                     break;
+                }
+                std::cout << "Extracted one packet" << std::endl;
             }
             const auto bufferCapacity{(unsigned int) receptionByteBuffer.capacity()};
             const auto numberOfBytesToTransfer{
@@ -248,7 +265,7 @@ namespace Device {
             const auto bufferCapacity{receptionByteBuffer.capacity()};
             if (newSize > bufferCapacity) {
                 receptionByteBuffer = internals::Types::Buffer(newSize, 0);
-                extractionByteBuffer.reserve(std::floor(newSize * 1.5));
+                //extractionByteBuffer.reserve(std::floor(newSize * 1.5));
             }
         }
 

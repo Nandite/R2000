@@ -204,15 +204,16 @@ namespace Device {
                 if (scanFactory.isComplete()) {
                     setOutputScanFromCompletedFactory(*scanFactory);
                 }
-                if (!hadEnoughBytes)
+                if (!hadEnoughBytes) {
                     break;
+                }
             }
             return position;
         }
 
     private:
         boost::asio::io_service ioService{};
-        std::unique_ptr<boost::asio::ip::udp::socket> socket{nullptr};
+        boost::asio::ip::udp::socket socket{ioService, boost::asio::ip::udp::v4()};
         boost::asio::ip::udp::endpoint endPoint{};
         internals::Types::Buffer receptionByteBuffer{};
         internals::Types::Buffer extractionByteBuffer{};
