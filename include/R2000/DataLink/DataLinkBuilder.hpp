@@ -22,7 +22,7 @@ namespace Device {
 
     class DeviceHandle;
 
-    enum class AsyncRequestResult;
+    enum class RequestResult;
 
     class builderException : public std::invalid_argument {
     public:
@@ -112,7 +112,7 @@ namespace Device {
     private:
         using WatchdogConfiguration = std::pair<bool, std::chrono::milliseconds>;
     public:
-        using AsyncBuildResult = std::pair<AsyncRequestResult, std::shared_ptr<DataLink>>;
+        using AsyncBuildResult = std::pair<RequestResult, std::shared_ptr<DataLink>>;
 
     public:
         /**

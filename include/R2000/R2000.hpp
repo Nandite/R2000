@@ -54,6 +54,17 @@ namespace Device {
         private:
             Socket socket;
         };
+
+        /**
+             * Get the underlying value of an enumeration.
+             * @tparam E The type of the enumerator.
+             * @param enumerator The instance of enumerator to get the value.
+             * @return The underlying value of the enumeration.
+             */
+        template<typename E>
+        static constexpr auto underlyingType(E enumerator) {
+            return static_cast<std::underlying_type_t<E>>(enumerator);
+        }
     } // namespace internals
     using PropertyTree = boost::property_tree::ptree;
 
@@ -80,27 +91,65 @@ namespace Device {
     /**
      * Result of an asynchronous request.
      */
-    enum class AsyncRequestResult {
-        SUCCESS,
-        FAILED,
-        TIMEOUT
+    enum class RequestResult {
+        SUCCESS = 200,
+        BAD_REQUEST = 400,
+        FORBIDDEN = 403,
+        UNKNOWN_COMMAND = 404,
+        TIMEOUT = 408,
+        FAILED = 800,
+        INVALID_DEVICE_RESPONSE = 801
     };
 
-    /**
-     * Convert a AsyncRequestResult to a string.
-     * @param result The AsyncRequestResult to convert.
-     * @return The AsyncRequestResult as a string.
-     */
-    inline std::string asyncResultToString(AsyncRequestResult result) {
-        switch (result) {
-            case AsyncRequestResult::SUCCESS:
-                return "success";
-            case AsyncRequestResult::FAILED:
-                return "failed";
-            case AsyncRequestResult::TIMEOUT:
-                return "timeout";
+    constexpr inline RequestResult requestResultFromCode(const unsigned int code) noexcept {
+        switch (code) {
+            case internals::underlyingType(RequestResult::SUCCESS): {
+                return RequestResult::SUCCESS;
+            }
+            case internals::underlyingType(RequestResult::BAD_REQUEST): {
+                return RequestResult::BAD_REQUEST;
+            }
+            case internals::underlyingType(RequestResult::FORBIDDEN): {
+                return RequestResult::FORBIDDEN;
+            }
+            case internals::underlyingType(RequestResult::UNKNOWN_COMMAND): {
+                return RequestResult::UNKNOWN_COMMAND;
+            }
+            case internals::underlyingType(RequestResult::TIMEOUT): {
+                return RequestResult::TIMEOUT;
+            }
+            case internals::underlyingType(RequestResult::INVALID_DEVICE_RESPONSE): {
+                return RequestResult::INVALID_DEVICE_RESPONSE;
+            }
+            default: {
+                return RequestResult::FAILED;
+            }
         }
-        return "unknown";
+    }
+
+    /**
+     * Convert a RequestResult to a string.
+     * @param result The RequestResult to convert.
+     * @return The RequestResult as a string.
+     */
+    inline std::string asyncResultToString(RequestResult result) {
+        switch (result) {
+            case RequestResult::SUCCESS:
+                return "Success";
+            case RequestResult::FAILED:
+                return "Failed";
+            case RequestResult::TIMEOUT:
+                return "Timeout";
+            case RequestResult::BAD_REQUEST:
+                return "Bad Request";
+            case RequestResult::FORBIDDEN:
+                return "Forbidden";
+            case RequestResult::UNKNOWN_COMMAND:
+                return "Not Found";
+            case RequestResult::INVALID_DEVICE_RESPONSE:
+                return "Invalid device response";
+        }
+        return "Unknown";
     }
 
     class AsyncResult {
@@ -109,27 +158,27 @@ namespace Device {
          * @param result The result of the asynchronous request.
          * @param tree The property tree obtained after the asynchronous HTTP request.
          */
-        AsyncResult(AsyncRequestResult result, const PropertyTree &tree) : requestResult(result), propertyTree(tree) {}
+        AsyncResult(RequestResult result, const PropertyTree &tree) : requestResult(result), propertyTree(tree) {}
 
         /**
          * Test either or not the asynchronous has succeed.
          * @return True if the request has yielded a SUCCESS value.
          */
-        inline explicit operator bool() const { return requestResult == AsyncRequestResult::SUCCESS; }
+        inline explicit operator bool() const { return requestResult == RequestResult::SUCCESS; }
 
         /**
-         * Compare this instance with a AsyncRequestResult value.
-         * @param rhs The AsyncRequestResult to test against.
-         * @return True if the AsyncRequestResult stored by this instance is equals to the parameter rhs.
+         * Compare this instance with a RequestResult value.
+         * @param rhs The RequestResult to test against.
+         * @return True if the RequestResult stored by this instance is equals to the parameter rhs.
          */
-        inline bool operator==(const AsyncRequestResult &rhs) const { return requestResult == rhs; }
+        inline bool operator==(const RequestResult &rhs) const { return requestResult == rhs; }
 
         /**
-         * Compare this instance with a AsyncRequestResult value.
-         * @param rhs The AsyncRequestResult to test against.
-         * @return True if the AsyncRequestResult stored by this instance is different to the parameter rhs.
+         * Compare this instance with a RequestResult value.
+         * @param rhs The RequestResult to test against.
+         * @return True if the RequestResult stored by this instance is different to the parameter rhs.
          */
-        inline bool operator!=(const AsyncRequestResult &rhs) const { return !(rhs == (*this).requestResult); }
+        inline bool operator!=(const RequestResult &rhs) const { return !(rhs == (*this).requestResult); }
 
         /**
          * @return the property tree obtained after the HTTP request.
@@ -137,12 +186,12 @@ namespace Device {
         [[nodiscard]] inline const PropertyTree &getPropertyTree() const { return propertyTree; }
 
         /**
-         * @return Get the AsyncRequestResult of the HTTP request.
+         * @return Get the RequestResult of the HTTP request.
          */
-        [[nodiscard]] inline AsyncRequestResult getRequestResult() const { return requestResult; }
+        [[nodiscard]] inline RequestResult getRequestResult() const { return requestResult; }
 
     private:
-        AsyncRequestResult requestResult{};
+        RequestResult requestResult{};
         PropertyTree propertyTree{};
     };
 
@@ -150,7 +199,7 @@ namespace Device {
     public:
         using AsyncCommandCallback = std::function<void(const AsyncResult &)>;
     private:
-        using HttpResult = std::tuple<int, std::string, std::string>;
+        using HttpResult = std::tuple<RequestResult, std::string, std::string>;
         using HttpGetCallback = std::function<void(const HttpResult &)>;
 
         /**
@@ -184,9 +233,9 @@ namespace Device {
          * @return A pair containing as first a flag indicating either or not the command has been successfully sent
          * and a reply received. The second of the pair is a property tree representing the content of the Http answer.
          */
-        [[nodiscard]] std::optional<Device::PropertyTree> sendHttpCommand(const std::string &command,
-                                                                          const std::string &parameter = "",
-                                                                          std::string value = "") const noexcept(false);
+        [[nodiscard]] std::pair<Device::RequestResult, Device::PropertyTree> sendHttpCommand(const std::string &command,
+                                                                                             const std::string &parameter = "",
+                                                                                             std::string value = "") const noexcept(false);
 
         /**
          * Send a HTTP Command with several parameters and their corresponding value to the device.
@@ -195,8 +244,8 @@ namespace Device {
          * @return A pair containing as first a flag indicating either or not the command has been successfully sent
          * and a reply received. The second of the pair is a property tree representing the content of the Http answer.
          */
-        [[nodiscard]] std::optional<Device::PropertyTree> sendHttpCommand(const std::string &command,
-                                                                          const Parameters::ParametersMap &parameters) const
+        [[nodiscard]] std::pair<Device::RequestResult, Device::PropertyTree> sendHttpCommand(const std::string &command,
+                                                                                             const Parameters::ParametersMap &parameters) const
         noexcept(false);
 
         /**

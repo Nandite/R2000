@@ -18,17 +18,18 @@ Device::R2000::makeShared(const Device::DeviceConfiguration &configuration) {
     return enableMakeShared(configuration);
 }
 
-std::optional<Device::PropertyTree> Device::R2000::sendHttpCommand(const std::string &command,
-                                                                   const std::string &parameter,
-                                                                   std::string value) const noexcept(false) {
+std::pair<Device::RequestResult, Device::PropertyTree> Device::R2000::sendHttpCommand(const std::string &command,
+                                                                                      const std::string &parameter,
+                                                                                      std::string value) const noexcept(false) {
     Parameters::ParametersMap parameters{};
     if (!parameter.empty())
         parameters[parameter] = std::move(value);
     return sendHttpCommand(command, parameters);
 }
 
-std::optional<Device::PropertyTree> Device::R2000::sendHttpCommand(const std::string &command,
-                                                                   const Parameters::ParametersMap &parameters) const
+std::pair<Device::RequestResult, Device::PropertyTree>
+Device::R2000::sendHttpCommand(const std::string &command,
+                               const Parameters::ParametersMap &parameters) const
 noexcept(false) {
     auto request{"/cmd/" + command};
     if (!parameters.empty()) {
@@ -46,19 +47,19 @@ noexcept(false) {
         const auto responseCode{std::get<0>(result)};
         const auto content{std::get<2>(result)};
         std::stringstream stringStream{content};
-        if (responseCode == 200) {
+        if (responseCode == RequestResult::SUCCESS) {
             boost::property_tree::json_parser::read_json(stringStream, propertyTree);
             if (verifyErrorCode(propertyTree)) {
-                return {std::move(propertyTree)};
+                return {responseCode, std::move(propertyTree)};
             }
-            return std::nullopt;
+            return {responseCode, {}};
         }
     }
     catch (const std::system_error &error) {
         std::clog << getName() << "sendHttpCommand::Http request error : " << error.what() << " ("
                   << error.code() << ")" << std::endl;
     }
-    return std::nullopt;
+    return {RequestResult::FAILED, {}};
 }
 
 bool Device::R2000::asyncSendHttpCommand(const std::string &command, AsyncCommandCallback callable,
@@ -73,20 +74,13 @@ bool Device::R2000::asyncSendHttpCommand(const std::string &command, const Param
     auto onHttpGetComplete{[fn = std::move(callable)](const HttpResult &httpResult) {
         Device::PropertyTree propertyTree{};
         const auto responseCode{std::get<0>(httpResult)};
-        if (responseCode != 200) {
-            if (responseCode == 408) {
-                std::invoke(fn, AsyncResult(AsyncRequestResult::TIMEOUT, Device::PropertyTree{}));
-            } else {
-                std::invoke(fn, AsyncResult(AsyncRequestResult::FAILED, Device::PropertyTree{}));
-            }
+        if (responseCode != RequestResult::SUCCESS) {
+            std::invoke(fn, AsyncResult(responseCode, {}));
         } else {
             const auto content{std::get<2>(httpResult)};
             std::stringstream stringStream{content};
             boost::property_tree::json_parser::read_json(stringStream, propertyTree);
-            const auto propertyTreeCode{verifyErrorCode(propertyTree)};
-            AsyncRequestResult requestResult{propertyTreeCode ? AsyncRequestResult::SUCCESS
-                                                              : AsyncRequestResult::FAILED};
-            std::invoke(fn, AsyncResult(requestResult, propertyTree));
+            std::invoke(fn, AsyncResult(responseCode, propertyTree));
         }
     }};
     return AsyncHttpGet(request, onHttpGetComplete, timeout);
@@ -123,7 +117,7 @@ Device::R2000::HttpResult Device::R2000::HttpGet(boost::asio::ip::tcp::socket &s
     std::getline(responseStream, statusMessage);
     if (!responseStream || httpVersion.substr(0, 5) != "HTTP/") {
         std::clog << "HttpGet::Invalid response" << std::endl;
-        return {0, {}, {}};
+        return {RequestResult::INVALID_DEVICE_RESPONSE, {}, {}};
     }
 
     {
@@ -164,7 +158,7 @@ Device::R2000::HttpResult Device::R2000::HttpGet(boost::asio::ip::tcp::socket &s
             character = ' ';
         }
     }
-    return {statusCode, header, content};
+    return {requestResultFromCode(statusCode), header, content};
 }
 
 Device::R2000::HttpResult Device::R2000::HttpGet(const std::string &requestPath) const noexcept(false) {
@@ -231,11 +225,12 @@ Device::R2000::onEndpointResolutionAttemptCompleted(const boost::system::error_c
     } else {
         if (error == boost::asio::error::operation_aborted) {
             std::clog << configuration.name << "::Endpoints resolution timeout" << std::endl;
+            std::invoke(callable, std::make_tuple(RequestResult::TIMEOUT, "", ""));
         } else {
             std::clog << configuration.name << "::Network error while resolving endpoints ("
                       << error.message() << ")" << std::endl;
+            std::invoke(callable, std::make_tuple(RequestResult::FAILED, "", ""));
         }
-        std::invoke(callable, std::make_tuple(0, std::string{}, std::string{}));
     }
 }
 
@@ -250,11 +245,11 @@ Device::R2000::onSocketConnectionAttemptCompleted(const boost::system::error_cod
     } else {
         if (error == boost::asio::error::operation_aborted) {
             std::clog << configuration.name << "::Socket connection timout" << std::endl;
-            std::invoke(callable, std::make_tuple(408, std::string{}, std::string{}));
+            std::invoke(callable, std::make_tuple(RequestResult::TIMEOUT, "", ""));
         } else {
             std::clog << configuration.name << "::Network error while connecting to the device ("
                       << error.message() << ")" << std::endl;
-            std::invoke(callable, std::make_tuple(0, std::string{}, std::string{}));
+            std::invoke(callable, std::make_tuple(RequestResult::FAILED, "", ""));
         }
     }
 }

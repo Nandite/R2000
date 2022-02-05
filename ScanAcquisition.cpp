@@ -88,6 +88,7 @@ std::optional<std::pair<std::string, unsigned short>> splitAddressAndPort(const 
  * @return
  */
 bool configureDevice(Device::R2000 &device, const std::string &frequency, const std::string &samplePerScan) {
+
     Device::Commands::SetParametersCommand setParametersCommand{device};
     const auto hmiBuilder{Device::Parameters::ReadWriteParameters::HmiDisplay()
                                   .unlockHmiButton()
@@ -101,12 +102,13 @@ bool configureDevice(Device::R2000 &device, const std::string &frequency, const 
                                       .withScanFrequency(frequency)
                                       .withSamplesPerScan(samplePerScan)
                                       .withScanDirection(Device::Parameters::SCAN_DIRECTION::CCW)};
+
     auto future{setParametersCommand.asyncExecute(1s, hmiBuilder, measureBuilder)};
     if (!future)
         return false;
     future->wait();
     const auto requestResult{future->get()};
-    const auto hasSucceed{requestResult == Device::AsyncRequestResult::SUCCESS};
+    const auto hasSucceed{requestResult == Device::RequestResult::SUCCESS};
     if (!hasSucceed) {
         std::clog << "Device is not reachable (" << Device::asyncResultToString(requestResult) << ") at "
                   << device.getHostname() << std::endl;
@@ -481,7 +483,7 @@ int main(int argc, char **argv) {
         future.wait();
         auto result{future.get()};
         const auto asyncRequestResult = result.first;
-        if (asyncRequestResult != Device::AsyncRequestResult::SUCCESS) {
+        if (asyncRequestResult != Device::RequestResult::SUCCESS) {
             std::clog << "Could not establish data link with sensor at " << device->getHostname() << " ("
                       << Device::asyncResultToString(asyncRequestResult) << ")" << std::endl;
             return EXIT_FAILURE;
@@ -503,8 +505,8 @@ int main(int argc, char **argv) {
         future.wait();
         auto result{future.get()};
         const auto asyncRequestResult = result.first;
-        if (asyncRequestResult != Device::AsyncRequestResult::SUCCESS) {
-            std::clog << "Could not establish data link with sensor at " << device->getHostname() << " ("
+        if (asyncRequestResult != Device::RequestResult::SUCCESS) {
+            std::clog << "Could not establish a data link with sensor at " << device->getHostname() << " ("
                       << Device::asyncResultToString(asyncRequestResult) << ")" << std::endl;
             return EXIT_FAILURE;
         }
@@ -514,7 +516,7 @@ int main(int argc, char **argv) {
     if (dataLink && dataLink->isAlive()) {
         std::cout << "Data link established with sensor at " << device->getHostname() << std::endl;
     } else {
-        std::clog << "Could not establish data link with sensor at " << device->getHostname() << std::endl;
+        std::clog << "Could not establish a data link with sensor at " << device->getHostname() << std::endl;
     }
 
     const auto port{0};

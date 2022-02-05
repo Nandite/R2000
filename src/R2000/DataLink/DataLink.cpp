@@ -14,7 +14,7 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<Devic
     if (!Device::Commands::StartScanCommand{*device}.asyncExecute(
             *deviceHandle, connectionTimeout,
             [&](const auto &result) -> void {
-                if (result == AsyncRequestResult::SUCCESS) {
+                if (result == RequestResult::SUCCESS) {
                     isConnected.store(true, std::memory_order_release);
                     if (deviceHandle->isWatchdogEnabled()) {
                         watchdogTaskFuture = std::async(std::launch::async, &DataLink::watchdogTask, this, 1s);
@@ -47,7 +47,7 @@ Device::DataLink::~DataLink() {
         if (stopScanFuture) {
             stopScanFuture->wait();
             const auto result{stopScanFuture->get()};
-            if (result != AsyncRequestResult::SUCCESS) {
+            if (result != RequestResult::SUCCESS) {
                 std::clog << device->getName() << "::DataLink::Could not stop the data stream ("
                           << asyncResultToString(result) << ")"
                           << std::endl;
@@ -57,7 +57,7 @@ Device::DataLink::~DataLink() {
         if (releaseHandleFuture) {
             releaseHandleFuture->wait();
             const auto result{releaseHandleFuture->get()};
-            if (result != AsyncRequestResult::SUCCESS) {
+            if (result != RequestResult::SUCCESS) {
                 std::clog << device->getName() << "::DataLink::Could not release the handle ("
                           << asyncResultToString(result) << ")"
                           << std::endl;
@@ -82,10 +82,10 @@ void Device::DataLink::watchdogTask(std::chrono::seconds commandTimeout) {
         }
         future->wait();
         auto result{future->get()};
-        const auto hasSucceed{result == AsyncRequestResult::SUCCESS};
+        const auto hasSucceed{result == RequestResult::SUCCESS};
         isConnected.store(hasSucceed, std::memory_order_release);
         std::unique_lock<LockType> guard{interruptCvLock, std::adopt_lock};
         interruptCv.wait_for(guard, watchdogTimeout,
-                             [this]() -> bool { return interruptFlag.load(std::memory_order_acquire); });
+                             [&]() -> bool { return interruptFlag.load(std::memory_order_acquire); });
     }
 }

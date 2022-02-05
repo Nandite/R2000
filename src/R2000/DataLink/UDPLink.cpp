@@ -68,7 +68,7 @@ void Device::UDPLink::onBytesReceived(const boost::system::error_code &error, un
     const auto from{std::cbegin(extractionByteBuffer)};
     const auto to{std::cend(extractionByteBuffer)};
     auto until{tryExtractingScanFromByteRange(from, to)};
-    removeUsedByteRangeFromExtractionBuffer(until);
+    removeUsedByteRangeFromExtractionBufferBeginningUntil(until);
     socket.async_receive_from(boost::asio::buffer(receptionByteBuffer), endPoint,
                               [&](const auto &error, const auto byteTransferred) {
                                   onBytesReceived(error, byteTransferred);

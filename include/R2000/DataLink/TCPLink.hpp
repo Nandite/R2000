@@ -181,12 +181,7 @@ namespace Device {
          */
         template<typename Iterator>
         auto insertByteRangeIntoExtractionBuffer(Iterator begin, Iterator end) {
-            const auto numberOfElements{std::distance(begin,end)};
-            std::cout << "Inserting " << numberOfElements << " byte(s)" << std::endl;
-            std::cout << "Before insertion : " << extractionByteBuffer.size() << std::endl;
             extractionByteBuffer.insert(std::cend(extractionByteBuffer), begin, end);
-            std::cout << "After insertion : " << extractionByteBuffer.size() << std::endl;
-            //std::copy(begin, end, std::back_inserter(extractionByteBuffer));
             return std::make_pair(std::cbegin(extractionByteBuffer),
                                   std::cend(extractionByteBuffer));
         }
@@ -197,17 +192,12 @@ namespace Device {
          * @tparam Iterator Iterator must  meet the requirements of MoveAssignable.
          * @param begin Beginning of the range within the extraction buffer to remove.
          * @param position Position within the extraction buffer until which to remove the bytes.
-         * @param end End of the range of the extraction buffer to.
          */
         template<typename Iterator>
-        void removeUsedByteRangeFromExtractionBuffer(Iterator position) noexcept {
+        void removeUsedByteRangeFromExtractionBufferBeginningUntil(Iterator position) noexcept {
             const auto remainingBytes{std::distance(position, std::cend(extractionByteBuffer))};
             if (remainingBytes) {
-                const auto removedBytes{std::distance(std::cbegin(extractionByteBuffer), position)};
-                std::cout << "Removing/Leaving " << removedBytes << "/" << remainingBytes << " byte(s)" << std::endl;
-                std::cout << "Before removal : " << extractionByteBuffer.size() << std::endl;
                 extractionByteBuffer.erase(std::cbegin(extractionByteBuffer), position);
-                std::cout << "After removal : " << extractionByteBuffer.size() << std::endl;
             } else {
                 extractionByteBuffer.clear();
             }
@@ -218,7 +208,7 @@ namespace Device {
          * @tparam Iterator The type of iterator of the range.
          * @param begin Start of the range to extract from.
          * @param end End of the range to extract from.
-         * @return A pair containing:
+         * @return A tuple containing:
          * - An iterator pointing to:
          *      - The position to start the next extraction of the next scan if the extraction has succeeded.
          *      - The start of the scan if the extraction has failed because there isn't enough byte to contain
@@ -226,11 +216,15 @@ namespace Device {
          *      - The end of the range if no scan has been found.
          * - The number of byte to transfer to receive the next scan. If there isn't enough byte to get the full scan,
          * this field is equals to the number of byte needed to transfer for getting the complete scan.
+         * - An optional containing the number of bytes needed to contain a full scan. This value is set only when
+         * a full scan has been received, so its size can be computed.
          */
         template<typename Iterator>
-        auto tryExtractingScanFromByteRange(Iterator begin, Iterator end) noexcept(false) {
+        std::tuple<Iterator, unsigned int, std::optional<unsigned int>>
+        tryExtractingScanFromByteRange(Iterator begin, Iterator end) noexcept(false) {
             auto position{begin};
             auto numberOfMissingBytes{0u};
+            std::optional<unsigned int> bufferSizeNeededToContainAFullScanOptional{std::nullopt};
             for (;;) {
                 const auto extractionResult{extractScanPacketFromByteRange(position, end, scanFactory)};
                 const auto hadEnoughBytes{std::get<0>(extractionResult)};
@@ -239,21 +233,18 @@ namespace Device {
                 if (scanFactory.isComplete()) {
                     const auto bufferSizeNeededToContainAFullScan{
                             computeBoundedRequiredBufferSizeToHostAFullScan(scanFactory)};
-                    resizeReceptionBuffer(bufferSizeNeededToContainAFullScan);
+                    bufferSizeNeededToContainAFullScanOptional = bufferSizeNeededToContainAFullScan;
                     setOutputScanFromCompletedFactory(*scanFactory);
-                    std::cout << "Extracted complete scan" << std::endl;
                 }
                 if (!hadEnoughBytes) {
-                    std::cout << "Need more bytes" << std::endl;
                     break;
                 }
-                std::cout << "Extracted one packet" << std::endl;
             }
             const auto bufferCapacity{(unsigned int) receptionByteBuffer.capacity()};
             const auto numberOfBytesToTransfer{
                     numberOfMissingBytes ? std::min(numberOfMissingBytes, bufferCapacity)
                                          : bufferCapacity};
-            return std::make_pair(position, numberOfBytesToTransfer);
+            return std::make_tuple(position, numberOfBytesToTransfer, bufferSizeNeededToContainAFullScanOptional);
         }
 
         /**
@@ -261,11 +252,11 @@ namespace Device {
          * if and only if the new size bigger than the current reception buffer capacity.
          * @param newSize : The new size to adopt if bigger than the current capacity.
          */
-        inline void resizeReceptionBuffer(const unsigned int newSize) noexcept(false) {
+        inline void resizeReceptionAndExtractionBuffers(const unsigned int newSize) noexcept(false) {
             const auto bufferCapacity{receptionByteBuffer.capacity()};
             if (newSize > bufferCapacity) {
                 receptionByteBuffer = internals::Types::Buffer(newSize, 0);
-                //extractionByteBuffer.reserve(std::floor(newSize * 1.5));
+                extractionByteBuffer.reserve(std::floor(newSize * 1.5));
             }
         }
 

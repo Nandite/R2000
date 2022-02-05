@@ -29,7 +29,7 @@ int main() {
     }
     future->wait();
     auto result{future->get()};
-    if (result != Device::AsyncRequestResult::SUCCESS) {
+    if (result != Device::RequestResult::SUCCESS) {
         std::clog << "Failed to reboot the device" << std::endl;
         return EXIT_FAILURE;
     }

@@ -100,10 +100,9 @@ namespace Device::Commands {
              */
             template<typename Fn,
                     typename Builder,
-                    std::enable_if_t<std::is_convertible_v<std::invoke_result_t<Fn, Builder>, bool>, int> = 0>
-            static constexpr inline auto resolve(Fn &&fn, Builder &&builder)
-            -> std::decay_t<typename std::invoke_result_t<Fn, Builder>> {
-                return std::invoke(fn, std::forward<Builder>(builder));
+                    std::enable_if_t<std::is_convertible_v<std::invoke_result_t<Fn, Builder>, void>, int> = 0>
+            static constexpr inline auto resolve(Fn &&fn, Builder &&builder) -> void {
+                std::invoke(fn, std::forward<Builder>(builder));
             }
 
             /**
@@ -118,12 +117,11 @@ namespace Device::Commands {
              */
             template<typename Fn,
                     typename Builder,
-                    std::enable_if_t<std::is_convertible_v<std::invoke_result_t<Fn, Builder>, bool>, int> = 0,
+                    std::enable_if_t<std::is_convertible_v<std::invoke_result_t<Fn, Builder>, void>, int> = 0,
                     typename... Rest>
-            static constexpr inline auto resolve(Fn &&fn, Builder &&builder, Rest &&... args)
-            -> std::decay_t<typename std::invoke_result_t<Fn, Builder>> {
-                return std::invoke(fn, std::forward<Builder>(builder)) &&
-                       resolve<Fn, Rest...>(std::forward<Fn>(fn), std::forward<Rest>(args)...);
+            static constexpr inline auto resolve(Fn &&fn, Builder &&builder, Rest &&... args) -> void {
+                std::invoke(fn, std::forward<Builder>(builder));
+                resolve<Fn, Rest...>(std::forward<Fn>(fn), std::forward<Rest>(args)...);
             }
         };
 
@@ -137,8 +135,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<GetProtocolInfo> {
-            using ResultType = std::optional<std::pair<Parameters::ParametersMap, Parameters::ParametersList>>;
-            using AsyncResultType = std::pair<Device::AsyncRequestResult, ResultType>;
+            using ResultType = std::tuple<Device::RequestResult, Parameters::ParametersMap, Parameters::ParametersList>;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -153,11 +151,13 @@ namespace Device::Commands {
              * - a list of commands available to execute with de device.
              */
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
-                const auto propertyTree{device.sendHttpCommand(COMMAND_GET_PROTOCOL_INFO)};
-                if (!propertyTree) {
-                    return std::nullopt;
+                const auto request{device.sendHttpCommand(COMMAND_GET_PROTOCOL_INFO)};
+                const auto requestResult{request.first};
+                if (requestResult != Device::RequestResult::SUCCESS) {
+                    return {requestResult, {}, {}};
                 }
-                return extractInfoFromPropertyTree(*propertyTree);
+                const auto info{extractInfoFromPropertyTree(request.second)};
+                return {requestResult, info.first, info.second};
             }
 
             /**
@@ -166,16 +166,16 @@ namespace Device::Commands {
              * @return an optional future that can be used to obtain the result of the command.
              * if the optional is empty, the device is already busy with another command.
              */
-            [[nodiscard]] [[maybe_unused]] std::optional<std::future<AsyncResultType>>
+            [[nodiscard]] [[maybe_unused]] std::optional<std::future<ResultType>>
             asyncExecute(std::chrono::milliseconds timeout) {
-                auto promise{std::make_shared<std::promise<AsyncResultType>>()};
+                auto promise{std::make_shared<std::promise<ResultType>>()};
                 auto onComplete{[promise](const Device::AsyncResult &result) -> void {
                     if (!result) {
-                        promise->set_value({result.getRequestResult(), std::nullopt});
+                        promise->set_value({result.getRequestResult(), {}, {}});
                         return;
                     }
-                    const auto parameters{extractInfoFromPropertyTree(result.getPropertyTree())};
-                    promise->set_value({result.getRequestResult(), parameters});
+                    const auto info{extractInfoFromPropertyTree(result.getPropertyTree())};
+                    promise->set_value({result.getRequestResult(), info.first, info.second});
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_GET_PROTOCOL_INFO, onComplete, timeout)) {
                     return {promise->get_future()};
@@ -190,16 +190,16 @@ namespace Device::Commands {
              * @return True if the command is being handled, False if the device is busy.
              */
             [[maybe_unused]] bool asyncExecute(std::chrono::milliseconds timeout,
-                                               std::function<void(const AsyncResultType &)> callable) {
+                                               std::function<void(const ResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_GET_PROTOCOL_INFO,
                         [c = std::move(callable)](const Device::AsyncResult &result) -> void {
                             if (!result) {
-                                std::invoke(c, AsyncResultType{result.getRequestResult(), std::nullopt});
+                                std::invoke(c, ResultType{result.getRequestResult(), {}, {}});
                                 return;
                             }
-                            const auto parameters{extractInfoFromPropertyTree(result.getPropertyTree())};
-                            std::invoke(c, AsyncResultType{result.getRequestResult(), parameters});
+                            const auto info{extractInfoFromPropertyTree(result.getPropertyTree())};
+                            std::invoke(c, ResultType{result.getRequestResult(), info.first, info.second});
                         },
                         timeout);
             }
@@ -212,7 +212,8 @@ namespace Device::Commands {
              * - a map of info of the protocol
              * - a list of commands available to execute with de device.
              */
-            static ResultType extractInfoFromPropertyTree(const PropertyTree &propertyTree) {
+            static std::pair<Parameters::ParametersMap, Parameters::ParametersList>
+            extractInfoFromPropertyTree(const PropertyTree &propertyTree) {
                 Parameters::ParametersList availableCommands{};
                 Parameters::ParametersMap protocolInfo{};
                 const auto commands{propertyTree.get_child_optional(PARAMETER_AVAILABLE_COMMANDS)};
@@ -223,7 +224,8 @@ namespace Device::Commands {
                         propertyTree.get_optional<std::string>(PARAMETER_PROTOCOL_VERSION_MINOR)};
 
                 if (!commands || !protocolName || !protocolVersionMajor || !protocolVersionMinor)
-                    return std::nullopt;
+                    return {{},
+                            {}};
                 for (const auto &name : *commands) {
                     const auto parameterName{name.second.get<std::string>("")};
                     if (parameterName.empty())
@@ -233,7 +235,7 @@ namespace Device::Commands {
                 protocolInfo.insert(std::make_pair(PARAMETER_PROTOCOL_NAME, *protocolName));
                 protocolInfo.insert(std::make_pair(PARAMETER_PROTOCOL_VERSION_MAJOR, *protocolVersionMajor));
                 protocolInfo.insert(std::make_pair(PARAMETER_PROTOCOL_VERSION_MINOR, *protocolVersionMinor));
-                return std::make_optional(std::make_pair(protocolInfo, availableCommands));
+                return std::make_pair(protocolInfo, availableCommands);
             }
 
         private:
@@ -242,8 +244,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<GetProtocolVersion> {
-            using ResultType = Parameters::PFSDP;
-            using AsyncResultType = std::pair<Device::AsyncRequestResult, ResultType>;
+            using ResultType = std::pair<Device::RequestResult, Parameters::PFSDP>;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -258,12 +260,13 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
                 CommandExecutorImpl<GetProtocolInfo> getProtocolInfo{device};
                 auto result{getProtocolInfo.execute()};
-                if (!result)
-                    return Parameters::PFSDP::UNKNOWN;
-                const auto parameters{(*result).first};
+                auto requestResult{std::get<0>(result)};
+                if (requestResult == RequestResult::SUCCESS)
+                    return {requestResult, Parameters::PFSDP::UNKNOWN};
+                const auto parameters{std::get<1>(result)};
                 const auto major{parameters.at(PARAMETER_PROTOCOL_VERSION_MAJOR)};
                 const auto minor{parameters.at(PARAMETER_PROTOCOL_VERSION_MINOR)};
-                return protocolVersionFromString(major, minor);
+                return {requestResult, protocolVersionFromString(major, minor)};
             }
 
             /**
@@ -278,17 +281,18 @@ namespace Device::Commands {
                     CommandExecutorImpl<GetProtocolInfo> getProtocolInfo{device};
                     auto future{getProtocolInfo.asyncExecute(timeout)};
                     if (!future) {
-                        return {Device::AsyncRequestResult::FAILED, Parameters::PFSDP::UNKNOWN};
+                        return {Device::RequestResult::FAILED, Parameters::PFSDP::UNKNOWN};
                     }
                     future->wait();
                     auto result{future->get()};
-                    if (result.first != Device::AsyncRequestResult::SUCCESS) {
-                        return {result.first, Parameters::PFSDP::UNKNOWN};
+                    const auto resultRequest{std::get<0>(result)};
+                    if (resultRequest != Device::RequestResult::SUCCESS) {
+                        return {resultRequest, Parameters::PFSDP::UNKNOWN};
                     }
-                    const auto parameters{(result.second)->first};
+                    const auto parameters{std::get<1>(result)};
                     const auto major{parameters.at(PARAMETER_PROTOCOL_VERSION_MAJOR)};
                     const auto minor{parameters.at(PARAMETER_PROTOCOL_VERSION_MINOR)};
-                    return {result.first, protocolVersionFromString(major, minor)};
+                    return {resultRequest, protocolVersionFromString(major, minor)};
                 });
             }
 
@@ -303,14 +307,15 @@ namespace Device::Commands {
                 CommandExecutorImpl<GetProtocolInfo> getProtocolInfo{device};
                 return getProtocolInfo.asyncExecute(timeout, [fn = std::move(callable)](
                         const CommandExecutorImpl<GetProtocolInfo>::AsyncResultType &result) -> void {
-                    if (result.first != Device::AsyncRequestResult::SUCCESS) {
-                        std::invoke(fn, AsyncResultType{result.first, Parameters::PFSDP::UNKNOWN});
+                    const auto resultRequest{std::get<0>(result)};
+                    if (resultRequest != Device::RequestResult::SUCCESS) {
+                        std::invoke(fn, AsyncResultType{resultRequest, Parameters::PFSDP::UNKNOWN});
                         return;
                     }
-                    const auto parameters{(result.second)->first};
+                    const auto parameters{std::get<1>(result)};
                     const auto major{parameters.at(PARAMETER_PROTOCOL_VERSION_MAJOR)};
                     const auto minor{parameters.at(PARAMETER_PROTOCOL_VERSION_MINOR)};
-                    std::invoke(fn, AsyncResultType{result.first, protocolVersionFromString(major, minor)});
+                    std::invoke(fn, AsyncResultType{resultRequest, protocolVersionFromString(major, minor)});
                 });
             }
 
@@ -367,8 +372,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<ReleaseHandle> {
-            using ResultType = bool;
-            using AsyncResultType = AsyncRequestResult;
+            using ResultType = std::vector<Device::RequestResult>;
+            using AsyncResultType = Device::RequestResult;
 
             /**
              * @param device The device to the send the command to.
@@ -386,12 +391,14 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] inline ResultType execute(Args &&... args) {
                 static_assert(std::conjunction_v<std::is_base_of<Device::DeviceHandle, typename std::decay_t<Args>>...>,
                               "All the provided handle must be of type DeviceHandle");
-                return RecursiveExecutorHelper::resolve(
-                        [this](const auto &handle) {
-                            return device.sendHttpCommand(COMMAND_RELEASE_HANDLE, PARAMETER_NAME_HANDLE,
-                                                          handle.value).has_value();
-                        },
-                        std::forward<Args>(args)...);
+                std::vector<Device::RequestResult> requestResults{};
+                RecursiveExecutorHelper::resolve([&](const auto &handle) -> void {
+                                                     auto result{device.sendHttpCommand(COMMAND_RELEASE_HANDLE, PARAMETER_NAME_HANDLE,
+                                                                                        handle.value)};
+                                                     requestResults.push_back(result.first);
+                                                 },
+                                                 std::forward<Args>(args)...);
+                return requestResults;
             }
 
             /**
@@ -425,12 +432,12 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_RELEASE_HANDLE, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
-                        [c = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
                             if (!result) {
-                                std::invoke(c, AsyncResultType{result.getRequestResult()});
+                                std::invoke(fn, AsyncResultType{result.getRequestResult()});
                                 return;
                             }
-                            std::invoke(c, AsyncResultType{result.getRequestResult()});
+                            std::invoke(fn, AsyncResultType{result.getRequestResult()});
                         },
                         timeout);
             }
@@ -441,8 +448,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<StartScanOutput> {
-            using ResultType = bool;
-            using AsyncResultType = Device::AsyncRequestResult;
+            using ResultType = std::vector<Device::RequestResult>;
+            using AsyncResultType = Device::RequestResult;
 
             /**
              * @param device The device to the send the command to.
@@ -460,12 +467,15 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] inline ResultType execute(Args &&... args) {
                 static_assert(std::conjunction_v<std::is_base_of<Device::DeviceHandle, typename std::decay_t<Args>>...>,
                               "All the provided handle must be of type DeviceHandle");
-                return RecursiveExecutorHelper::resolve(
-                        [this](const auto &handle) {
-                            return device.sendHttpCommand(COMMAND_START_SCAN_OUTPUT, PARAMETER_NAME_HANDLE,
-                                                          handle.value).has_value();
+                std::vector<Device::RequestResult> requestResults{};
+                RecursiveExecutorHelper::resolve(
+                        [&](const auto &handle) -> void {
+                            auto result{device.sendHttpCommand(COMMAND_START_SCAN_OUTPUT, PARAMETER_NAME_HANDLE,
+                                                               handle.value)};
+                            requestResults.push_back(result.first);
                         },
                         std::forward<Args>(args)...);
+                return requestResults;
             }
 
             /**
@@ -500,12 +510,12 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_START_SCAN_OUTPUT, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
-                        [c = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
                             if (!result) {
-                                std::invoke(c, AsyncResultType{result.getRequestResult()});
+                                std::invoke(fn, AsyncResultType{result.getRequestResult()});
                                 return;
                             }
-                            std::invoke(c, AsyncResultType{result.getRequestResult()});
+                            std::invoke(fn, AsyncResultType{result.getRequestResult()});
                         },
                         timeout);
             }
@@ -516,8 +526,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<StopScanOutput> {
-            using ResultType = bool;
-            using AsyncResultType = Device::AsyncRequestResult;
+            using ResultType = std::vector<Device::RequestResult>;
+            using AsyncResultType = Device::RequestResult;
 
             /**
              * @param device The device to the send the command to.
@@ -535,12 +545,15 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] inline ResultType execute(Args &&... args) {
                 static_assert(std::conjunction_v<std::is_base_of<Device::DeviceHandle, typename std::decay_t<Args>>...>,
                               "All the provided handle must be of type DeviceHandle");
-                return RecursiveExecutorHelper::resolve(
-                        [this](const auto &handle) {
-                            return device.sendHttpCommand(COMMAND_STOP_SCAN_OUTPUT, PARAMETER_NAME_HANDLE,
-                                                          handle.value).has_value();
+                std::vector<Device::RequestResult> requestResults{};
+                RecursiveExecutorHelper::resolve(
+                        [&](const auto &handle) -> void {
+                            auto result{device.sendHttpCommand(COMMAND_STOP_SCAN_OUTPUT, PARAMETER_NAME_HANDLE,
+                                                               handle.value)};
+                            requestResults.push_back(result.first);
                         },
                         std::forward<Args>(args)...);
+                return requestResults;
             }
 
             /**
@@ -575,12 +588,12 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_STOP_SCAN_OUTPUT, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
-                        [c = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
                             if (!result) {
-                                std::invoke(c, AsyncResultType{result.getRequestResult()});
+                                std::invoke(fn, AsyncResultType{result.getRequestResult()});
                                 return;
                             }
-                            std::invoke(c, AsyncResultType{result.getRequestResult()});
+                            std::invoke(fn, AsyncResultType{result.getRequestResult()});
                         },
                         timeout);
             }
@@ -591,8 +604,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<FeedWatchdog> {
-            using ResultType = bool;
-            using AsyncResultType = Device::AsyncRequestResult;
+            using ResultType = std::vector<Device::RequestResult>;
+            using AsyncResultType = Device::RequestResult;
 
             /**
              * @param device The device to the send the command to.
@@ -610,12 +623,14 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] inline ResultType execute(Args &&... args) {
                 static_assert(std::conjunction_v<std::is_base_of<Device::DeviceHandle, typename std::decay_t<Args>>...>,
                               "All the provided handle must be of type DeviceHandle");
-                return RecursiveExecutorHelper::resolve(
-                        [this](const auto &handle) {
-                            return device.sendHttpCommand(COMMAND_FEED_WATCHDOG, PARAMETER_NAME_HANDLE,
-                                                          handle.value).has_value();
-                        },
-                        std::forward<Args>(args)...);
+                std::vector<Device::RequestResult> requestResults{};
+                RecursiveExecutorHelper::resolve([&](const auto &handle) -> void {
+                                                     auto result{device.sendHttpCommand(COMMAND_FEED_WATCHDOG, PARAMETER_NAME_HANDLE,
+                                                                                        handle.value)};
+                                                     requestResults.push_back(result.first);
+                                                 },
+                                                 std::forward<Args>(args)...);
+                return requestResults;
             }
 
             /**
@@ -667,8 +682,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<GetParameters> {
-            using ResultType = std::optional<Parameters::ParametersMap>;
-            using AsyncResultType = std::pair<Device::AsyncRequestResult, ResultType>;
+            using ResultType = std::pair<Device::RequestResult, Parameters::ParametersMap>;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -690,13 +705,15 @@ namespace Device::Commands {
                 Parameters::ParametersList parameters{};
                 ParametersChaining::template list(parameters, std::forward<Args>(args)...);
                 const auto parametersListAsString{chainAndConvertParametersToString(std::forward<Args>(args)...)};
-                const auto propertyTree{
+                const auto result{
                         device.sendHttpCommand(COMMAND_GET_PARAMETER, PARAMETER_NAME_LIST,
                                                parametersListAsString.first)};
-                if (!propertyTree) {
-                    return std::nullopt;
+                const auto requestResult{result.first};
+                const auto propertyTree{result.second};
+                if (requestResult != Device::RequestResult::SUCCESS) {
+                    return {requestResult, {}};
                 }
-                return {extractParametersValues(parameters, *propertyTree)};
+                return {requestResult, extractParametersValues(parameters, propertyTree)};
             }
 
             /**
@@ -709,8 +726,7 @@ namespace Device::Commands {
              */
             template<typename... Args>
             [[nodiscard]] [[maybe_unused]] std::optional<std::future<AsyncResultType>>
-            asyncExecuteFuture(std::chrono::milliseconds timeout,
-                               Args &&... args) {
+            asyncExecuteFuture(std::chrono::milliseconds timeout, Args &&... args) {
                 static_assert(
                         std::conjunction_v<std::is_base_of<Parameters::ReadOnlyRequestBuilder, typename std::decay_t<Args>>...>,
                         "All the provided handle must be of type ReadOnlyRequestBuilder");
@@ -720,7 +736,7 @@ namespace Device::Commands {
                         [promise, parameters = std::move(chainedParameters.second)](
                                 const Device::AsyncResult &result) -> void {
                             if (!result) {
-                                promise->set_value({result.getRequestResult(), std::nullopt});
+                                promise->set_value({result.getRequestResult(), {}});
                                 return;
                             }
                             const auto receivedParameters{
@@ -754,7 +770,7 @@ namespace Device::Commands {
                                 parameters = std::move(chainedParameters.second)](
                                 const Device::AsyncResult &result) -> void {
                             if (!result) {
-                                std::invoke(fn, AsyncResultType{result.getRequestResult(), std::nullopt});
+                                std::invoke(fn, AsyncResultType{result.getRequestResult(), {}});
                                 return;
                             }
                             const auto receivedParameters{
@@ -782,7 +798,7 @@ namespace Device::Commands {
                     }
                     keysValues.insert(std::make_pair(name, *value));
                 }
-                return {keysValues};
+                return keysValues;
             }
 
         private:
@@ -812,8 +828,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<SetParameters> {
-            using ResultType = bool;
-            using AsyncResultType = Device::AsyncRequestResult;
+            using ResultType = Device::RequestResult;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -834,7 +850,7 @@ namespace Device::Commands {
                         "All the provided handle must be of type ReadWriteRequestBuilder");
                 Parameters::ParametersMap parameters{};
                 ParametersChaining::template map(parameters, std::forward<Args>(args)...);
-                return device.sendHttpCommand(COMMAND_SET_PARAMETER, parameters).has_value();
+                return device.sendHttpCommand(COMMAND_SET_PARAMETER, parameters).first;
             }
 
             /**
@@ -895,8 +911,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<FetchParameterList> {
-            using ResultType = std::optional<Parameters::ParametersList>;
-            using AsyncResultType = std::pair<Device::AsyncRequestResult, ResultType>;
+            using ResultType = std::pair<Device::RequestResult, Parameters::ParametersList>;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -910,11 +926,13 @@ namespace Device::Commands {
              * If the optional is empty, the device is already busy with another command.
              */
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
-                const auto propertyTree{device.sendHttpCommand(COMMAND_LIST_PARAMETERS)};
-                if (!propertyTree) {
-                    return std::nullopt;
+                const auto result{device.sendHttpCommand(COMMAND_LIST_PARAMETERS)};
+                const auto requestResult{result.first};
+                const auto &propertyTree{result.second};
+                if (requestResult != Device::RequestResult::SUCCESS) {
+                    return {requestResult, {}};
                 }
-                return {extractParametersFromPropertyTree(*propertyTree)};
+                return {requestResult, extractParametersFromPropertyTree(propertyTree)};
             }
 
             /**
@@ -928,11 +946,11 @@ namespace Device::Commands {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
                 auto onComplete{[promise](const Device::AsyncResult &result) -> void {
                     if (!result) {
-                        promise->set_value({result.getRequestResult(), std::nullopt});
+                        promise->set_value({result.getRequestResult(), {}});
                         return;
                     }
                     const auto parameters{extractParametersFromPropertyTree(result.getPropertyTree())};
-                    promise->set_value({result.getRequestResult(), {parameters}});
+                    promise->set_value({result.getRequestResult(), parameters});
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_LIST_PARAMETERS, onComplete, timeout)) {
                     return {promise->get_future()};
@@ -952,11 +970,11 @@ namespace Device::Commands {
                 return device.asyncSendHttpCommand(
                         COMMAND_LIST_PARAMETERS, [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
                             if (!result) {
-                                std::invoke(fn, AsyncResultType{result.getRequestResult(), std::nullopt});
+                                std::invoke(fn, AsyncResultType{result.getRequestResult(), {}});
                                 return;
                             }
                             const auto parameters{extractParametersFromPropertyTree(result.getPropertyTree())};
-                            std::invoke(fn, AsyncResultType{result.getRequestResult(), {parameters}});
+                            std::invoke(fn, AsyncResultType{result.getRequestResult(), parameters});
                         },
                         timeout);
             }
@@ -988,8 +1006,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<FactoryResetParameters> {
-            using ResultType = bool;
-            using AsyncResultType = Device::AsyncRequestResult;
+            using ResultType = Device::RequestResult;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -1009,7 +1027,7 @@ namespace Device::Commands {
                         std::conjunction_v<std::is_base_of<Parameters::ReadWriteRequestBuilder, typename std::decay_t<Args>>...>,
                         "All the provided handle must be of type ReadWriteRequestBuilder");
                 const auto params{chainAndConvertParametersToString(std::forward<Args>(args)...)};
-                return device.sendHttpCommand(COMMAND_RESET_PARAMETERS, PARAMETER_NAME_LIST, params).has_value();
+                return device.sendHttpCommand(COMMAND_RESET_PARAMETERS, PARAMETER_NAME_LIST, params).first;
             }
 
             /**
@@ -1023,8 +1041,7 @@ namespace Device::Commands {
              */
             template<typename... Args>
             [[nodiscard]] [[maybe_unused]] std::optional<std::future<AsyncResultType>>
-            asyncExecute(std::chrono::milliseconds timeout,
-                         Args &&... args) {
+            asyncExecute(std::chrono::milliseconds timeout, Args &&... args) {
                 static_assert(
                         std::conjunction_v<std::is_base_of<Parameters::ReadWriteRequestBuilder, typename std::decay_t<Args>>...>,
                         "All the provided handle must be of type ReadWriteRequestBuilder");
@@ -1091,8 +1108,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<FactoryResetDevice> {
-            using ResultType = bool;
-            using AsyncResultType = Device::AsyncRequestResult;
+            using ResultType = Device::RequestResult;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -1105,7 +1122,7 @@ namespace Device::Commands {
              * @return True if device has been reset, False otherwise.
              */
             [[nodiscard]] [[maybe_unused]] inline ResultType execute() {
-                return device.sendHttpCommand(COMMAND_FACTORY_RESET).has_value();
+                return device.sendHttpCommand(COMMAND_FACTORY_RESET).first;
             }
 
             /**
@@ -1148,8 +1165,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<RebootDevice> {
-            using ResultType = bool;
-            using AsyncResultType = Device::AsyncRequestResult;
+            using ResultType = Device::RequestResult;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -1162,7 +1179,7 @@ namespace Device::Commands {
              * @return True if the device has been rebooted, False otherwise.
              */
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
-                return device.sendHttpCommand(COMMAND_REBOOT_DEVICE).has_value();
+                return device.sendHttpCommand(COMMAND_REBOOT_DEVICE).first;
             }
 
             /**
@@ -1205,8 +1222,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<RequestTcpHandle> {
-            using ResultType = std::optional<std::pair<int, Device::HandleType>>;
-            using AsyncResultType = std::pair<Device::AsyncRequestResult, ResultType>;
+            using ResultType = std::tuple<Device::RequestResult, int, Device::HandleType>;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -1225,11 +1242,14 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] ResultType
             execute(const Parameters::ReadWriteParameters::TcpHandle &builder) {
                 const auto parameters{builder.build()};
-                const auto propertyTree{device.sendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters)};
-                if (!propertyTree) {
-                    return std::nullopt;
+                const auto result{device.sendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters)};
+                const auto requestCode{result.first};
+                const auto &propertyTree{result.second};
+                if (requestCode != Device::RequestResult::SUCCESS) {
+                    return {requestCode, {}, {}};
                 }
-                return extractHandleInfoFromPropertyTree(*propertyTree);
+                const auto handle{extractHandleInfoFromPropertyTree(propertyTree)};
+                return {requestCode, handle.first, handle.second};
             }
 
             /**
@@ -1245,11 +1265,11 @@ namespace Device::Commands {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
                 auto onComplete{[promise](const Device::AsyncResult &result) -> void {
                     if (!result) {
-                        promise->set_value({result.getRequestResult(), std::nullopt});
+                        promise->set_value({result.getRequestResult(), {}, {}});
                         return;
                     }
                     const auto handle{extractHandleInfoFromPropertyTree(result.getPropertyTree())};
-                    promise->set_value({result.getRequestResult(), handle});
+                    promise->set_value({result.getRequestResult(), handle.first, handle.second});
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters, onComplete, timeout)) {
                     return {promise->get_future()};
@@ -1268,17 +1288,19 @@ namespace Device::Commands {
                                                std::chrono::milliseconds timeout,
                                                std::function<void(const AsyncResultType &)> callable) {
                 const auto parameters{builder.build()};
-                return device.asyncSendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters, [fn = std::move(callable)](
+                return device.asyncSendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters,
+                                                   [fn = std::move(callable)](
                                                            const Device::AsyncResult &result) -> void {
                                                        if (!result) {
-                                                           std::invoke(fn, AsyncResultType{result.getRequestResult(),
-                                                                                           std::nullopt});
+                                                           std::invoke(fn,
+                                                                       AsyncResultType{result.getRequestResult(), {},
+                                                                                       {}});
                                                            return;
                                                        }
                                                        const auto handle{extractHandleInfoFromPropertyTree(
                                                                result.getPropertyTree())};
-                                                       std::invoke(fn,
-                                                                   AsyncResultType{result.getRequestResult(), handle});
+                                                       std::invoke(fn, AsyncResultType{result.getRequestResult(),
+                                                                                       handle.first, handle.second});
                                                    },
                                                    timeout);
             }
@@ -1290,12 +1312,11 @@ namespace Device::Commands {
              * @return a pair containing the port of the device at which to connect to receive scans
              * and the handle identification value.
              */
-            static ResultType extractHandleInfoFromPropertyTree(const PropertyTree &propertyTree) {
-                const auto port{propertyTree.get_optional<int>("port")};
-                const auto handle{propertyTree.get_optional<HandleType>("handle")};
-                if (!port || !handle)
-                    return std::nullopt;
-                return {std::make_pair(*port, *handle)};
+            static std::pair<int, Device::HandleType>
+            extractHandleInfoFromPropertyTree(const PropertyTree &propertyTree) {
+                const auto port{propertyTree.get<int>("port")};
+                const auto handle{propertyTree.get<HandleType>("handle")};
+                return std::make_pair(port, handle);
             }
 
         private:
@@ -1304,8 +1325,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<RequestUdpHandle> {
-            using ResultType = std::optional<Device::HandleType>;
-            using AsyncResultType = std::pair<Device::AsyncRequestResult, ResultType>;
+            using ResultType = std::pair<Device::RequestResult, HandleType>;
+            using AsyncResultType = ResultType;
 
             /**
              * @param device The device to the send the command to.
@@ -1322,11 +1343,14 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] ResultType
             execute(const Parameters::ReadWriteParameters::UdpHandle &builder) {
                 const auto parameters{builder.build()};
-                const auto propertyTree{device.sendHttpCommand(COMMAND_REQUEST_UDP_HANDLE, parameters)};
-                if (!propertyTree) {
-                    return std::nullopt;
+                const auto result{device.sendHttpCommand(COMMAND_REQUEST_UDP_HANDLE, parameters)};
+                const auto requestResult{result.first};
+                const auto propertyTree{result.second};
+                if (requestResult != Device::RequestResult::SUCCESS) {
+                    return {requestResult, {}};
                 }
-                return extractHandleInfoFromPropertyTree(*propertyTree);
+                const auto handle{extractHandleInfoFromPropertyTree(propertyTree)};
+                return {requestResult, handle};
             }
 
             /**
@@ -1342,7 +1366,7 @@ namespace Device::Commands {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
                 auto onComplete{[promise](const Device::AsyncResult &result) -> void {
                     if (!result) {
-                        promise->set_value({result.getRequestResult(), std::nullopt});
+                        promise->set_value({result.getRequestResult(), {}});
                         return;
                     }
                     const auto handle{extractHandleInfoFromPropertyTree(result.getPropertyTree())};
@@ -1369,7 +1393,7 @@ namespace Device::Commands {
                         COMMAND_REQUEST_UDP_HANDLE, parameters,
                         [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
                             if (!result) {
-                                std::invoke(fn, AsyncResultType{result.getRequestResult(), std::nullopt});
+                                std::invoke(fn, AsyncResultType{result.getRequestResult(), {}});
                                 return;
                             }
                             const auto handle{extractHandleInfoFromPropertyTree(result.getPropertyTree())};
@@ -1384,11 +1408,8 @@ namespace Device::Commands {
              * @param propertyTree The device answer as a property tree.
              * @return The handle identification value.
              */
-            static ResultType extractHandleInfoFromPropertyTree(const PropertyTree &propertyTree) {
-                const auto handle{propertyTree.get_optional<std::string>("handle")};
-                if (!handle)
-                    return std::nullopt;
-                return {*handle};
+            static Device::HandleType extractHandleInfoFromPropertyTree(const PropertyTree &propertyTree) {
+                return propertyTree.get<std::string>("handle");
             }
 
         private:
@@ -1398,7 +1419,7 @@ namespace Device::Commands {
         template<>
         struct CommandExecutorImpl<GetScanOutputConfig> {
             using ResultType = std::vector<std::optional<Parameters::ParametersMap>>;
-            using AsyncResultType = std::pair<Device::AsyncRequestResult, std::optional<Parameters::ParametersMap>>;
+            using AsyncResultType = std::pair<Device::RequestResult, std::optional<Parameters::ParametersMap>>;
 
             /**
              * @param device The device to the send the command to.
@@ -1418,7 +1439,7 @@ namespace Device::Commands {
                               "All the provided handle must be of type DeviceHandle");
                 std::vector<std::optional<Parameters::ParametersMap>> configurations{};
                 RecursiveExecutorHelper::resolve(
-                        [this, &configurations](const auto &handle) {
+                        [this, &configurations](const auto &handle) -> void {
                             const auto propertyTree{
                                     device.sendHttpCommand(COMMAND_GET_SCAN_OUTPUT_CONFIG, PARAMETER_NAME_HANDLE,
                                                            handle.value)};
@@ -1508,8 +1529,8 @@ namespace Device::Commands {
 
         template<>
         struct CommandExecutorImpl<SetScanOutputConfig> {
-            using ResultType = bool;
-            using AsyncResultType = Device::AsyncRequestResult;
+            using ResultType = std::vector<Device::RequestResult>;
+            using AsyncResultType = Device::RequestResult;
 
             /**
              * @param device The device to the send the command to.
@@ -1528,12 +1549,15 @@ namespace Device::Commands {
                 static_assert(
                         std::conjunction_v<std::is_base_of<Parameters::HandleParameters, typename std::decay_t<Args>>...>,
                         "All the provided handle must be of type HandleParameters");
-                return RecursiveExecutorHelper::template resolve(
-                        [this](const auto &builder) {
+                std::vector<Device::RequestResult> requestResults{};
+                RecursiveExecutorHelper::template resolve(
+                        [&](const auto &builder) -> void {
                             const auto parameters{builder.build()};
-                            return device.sendHttpCommand(COMMAND_SET_SCAN_OUTPUT_CONFIG, parameters).has_value();
+                            auto result{device.sendHttpCommand(COMMAND_SET_SCAN_OUTPUT_CONFIG, parameters).first};
+                            requestResults.push_back(result.first);
                         },
                         std::forward<Args>(args)...);
+                return requestResults;
             }
 
             /**

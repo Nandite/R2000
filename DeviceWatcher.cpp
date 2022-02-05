@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
     auto future{getProtocolVersion.asyncExecute(3s)};
     future.wait();
     auto result{future.get()};
-    if (result.first != Device::AsyncRequestResult::SUCCESS) {
+    if (result.first != Device::RequestResult::SUCCESS) {
         std::clog << "Could not get the device version (" << Device::asyncResultToString(result.first) << ")"
                   << std::endl;
     }

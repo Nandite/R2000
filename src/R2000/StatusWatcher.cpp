@@ -16,25 +16,25 @@ Device::StatusWatcher::StatusWatcher(std::shared_ptr<R2000> sharedDevice, std::c
 }
 
 void Device::StatusWatcher::statusWatcherTask() {
-    const auto threadId{device->getName() + ".StatusWatcher"};
-    pthread_setname_np(pthread_self(), threadId.c_str());
+    const auto taskId{device->getName() + ".StatusWatcher"};
+    pthread_setname_np(pthread_self(), taskId.c_str());
     Device::Commands::GetParametersCommand getParametersCommand{*device};
     for (; !interruptFlag.load(std::memory_order_acquire);) {
         auto future{getParametersCommand.asyncExecuteFuture(1s, systemStatus)};
         if (!future) {
             std::clog << "StatusWatcher::" << device->getName()
-                      << "::Could not request get the parameters from the device." << std::endl;
+                      << "::Could not request get status from the device." << std::endl;
         } else {
             future->wait();
             auto result{future->get()};
             const auto requestResult{result.first};
-            const auto requestHasSucceed{requestResult == AsyncRequestResult::SUCCESS};
+            const auto requestHasSucceed{requestResult == RequestResult::SUCCESS};
             const auto parameters{result.second};
-            if (requestHasSucceed && parameters) {
-                const auto status{DeviceStatus{*parameters}};
+            if (requestHasSucceed) {
+                const auto status{DeviceStatus{parameters}};
                 isConnected.store(true, std::memory_order_release);
                 {
-                    RealtimeStatus::ScopedAccess <farbot::ThreadType::realtime> scanGuard(*realtimeStatus);
+                    RealtimeStatus::ScopedAccess <farbot::ThreadType::realtime> scanGuard{*realtimeStatus};
                     *scanGuard = status;
                 }
                 std::unique_lock<LockType> guard{callbackLock, std::adopt_lock};

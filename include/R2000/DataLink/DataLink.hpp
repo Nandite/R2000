@@ -41,7 +41,7 @@ namespace Device {
          * If no magic has been found, an empty optional is returned.
          */
         template<typename Iterator>
-        static std::optional<std::pair<Iterator, Iterator>> retrievePacketMagic(Iterator begin, Iterator end) {
+        static std::optional<Iterator> retrievePacketMagic(Iterator begin, Iterator end) {
             constexpr auto byteSizeOf8Bits{sizeof(std::uint8_t)};
             static_assert(byteSizeOf8Bits == 1, "The size of uint8_t must be exactly 1 byte");
             auto position{begin};
@@ -49,7 +49,7 @@ namespace Device {
             while (position != lastByteBeforeEnd) {
                 const auto uint16Value{std::uint16_t(*position) | (std::uint16_t(*(position + 1)) << 8)};
                 if (uint16Value == PACKET_MAGIC_START)
-                    return {std::make_pair(position, std::next(position, 2))};
+                    return {position};
                 std::advance(position, byteSizeOf8Bits);
             }
             return std::nullopt;
@@ -74,7 +74,7 @@ namespace Device {
             const auto magic{retrievePacketMagic(begin, end)};
             if (!magic)
                 return std::nullopt;
-            const auto headerStart{(*magic).first};
+            const auto headerStart{(*magic)};
             const auto header{Data::Header::fromByteRange(headerStart)};
             return {{headerStart, header}};
         }
@@ -273,7 +273,7 @@ namespace Device {
                 return retrieve32BitsUnsignedIntegersFromByteRange(begin, end, numberOfPoints,
                                                                    [&distances, &amplitudes](const uint32_t &point) {
                                                                        const auto distance{point & 0x000FFFFF};
-                                                                       const auto amplitude{(point & 0xFFFFF000) >> 20};
+                                                                       const auto amplitude{(point & 0xFFF00000) >> 20};
                                                                        const auto nanOrDistance =
                                                                                distance != 0xFFFFF ? distance
                                                                                                    : std::numeric_limits<uint32_t>::quiet_NaN();

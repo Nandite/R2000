@@ -175,7 +175,7 @@ namespace Device {
          * @param position Position within the extraction buffer until which to remove the bytes.
          */
         template<typename Iterator>
-        void removeUsedByteRangeFromExtractionBuffer(Iterator position) noexcept {
+        void removeUsedByteRangeFromExtractionBufferBeginningUntil(Iterator position) noexcept {
             const auto remainingBytes{std::distance(position, std::cend(extractionByteBuffer))};
             if (remainingBytes) {
                 extractionByteBuffer.erase(std::cbegin(extractionByteBuffer), position);

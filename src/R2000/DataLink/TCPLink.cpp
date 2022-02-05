@@ -13,12 +13,10 @@ Device::TCPLink::TCPLink(std::shared_ptr<R2000> iDevice,
                          std::shared_ptr<DeviceHandle> iHandle) noexcept(false)
         : DataLink(std::move(iDevice), std::move(iHandle), 5s),
           socket(std::make_unique<boost::asio::ip::tcp::socket>(ioService)),
-          receptionByteBuffer(DEFAULT_RECEPTION_BUFFER_SIZE, 0)//,
-          //extractionByteBuffer(DEFAULT_EXTRACTION_BUFFER_SIZE, 0)
-          {
+          receptionByteBuffer(DEFAULT_RECEPTION_BUFFER_SIZE, 0) {
     extractionByteBuffer.reserve(DEFAULT_EXTRACTION_BUFFER_SIZE);
     asynchronousResolveEndpoints();
-    ioServiceTask = std::async(std::launch::async, [this]() {
+    ioServiceTask = std::async(std::launch::async, [&]() {
         ioService.run();
         std::clog << device->getName() << "::TCPLink::Exiting io service task" << std::endl;
     });
@@ -28,7 +26,7 @@ void Device::TCPLink::asynchronousResolveEndpoints() {
     const auto hostname{deviceHandle->getAddress()};
     const auto port{deviceHandle->getPort()};
     boost::asio::ip::tcp::resolver::query query{hostname.to_string(), std::to_string(port)};
-    resolver.async_resolve(query, [this](const auto &error, auto queriedEndpoints) {
+    resolver.async_resolve(query, [&](const auto &error, auto queriedEndpoints) {
         if (!error) {
             endPoints = std::move(queriedEndpoints);
             asynchronousConnectSocket(std::begin(endPoints), std::end(endPoints));
@@ -38,7 +36,7 @@ void Device::TCPLink::asynchronousResolveEndpoints() {
                 return;
             }
             std::unique_lock<LockType> interruptGuard{interruptSocketAsyncOpsCvLock, std::adopt_lock};
-            interruptSocketAsyncOpsCv.wait_for(interruptGuard, 10s, [this]() -> bool {
+            interruptSocketAsyncOpsCv.wait_for(interruptGuard, 10s, [&]() -> bool {
                 return interruptSocketAsyncOpsFlag.load(std::memory_order_acquire);
             });
             asynchronousResolveEndpoints();
@@ -65,7 +63,7 @@ void Device::TCPLink::onSocketConnectionAttemptCompleted(boost::system::error_co
         }
         isConnected.store(false, std::memory_order_release);
         std::unique_lock<LockType> interruptGuard{interruptSocketAsyncOpsCvLock, std::adopt_lock};
-        interruptSocketAsyncOpsCv.wait_for(interruptGuard, 20s, [this]() -> bool {
+        interruptSocketAsyncOpsCv.wait_for(interruptGuard, 20s, [&]() -> bool {
             return interruptSocketAsyncOpsFlag.load(std::memory_order_acquire);
         });
         asynchronousResolveEndpoints();
@@ -82,18 +80,21 @@ void Device::TCPLink::onBytesReceived(const boost::system::error_code &error, un
         isConnected.store(false, std::memory_order_release);
         return;
     }
-    std::cout << "Transferred " << byteTransferred << " byte(s)"<< std::endl;
-    std::cout << "Reception buffer size/capacity : " << receptionByteBuffer.size() << "/"
-              << receptionByteBuffer.capacity() << std::endl;
     const auto begin{std::cbegin(receptionByteBuffer)};
     const auto end{std::next(begin, byteTransferred)};
     insertByteRangeIntoExtractionBuffer(begin, end);
     const auto from{std::cbegin(extractionByteBuffer)};
     const auto to{std::cend(extractionByteBuffer)};
-    const auto until{tryExtractingScanFromByteRange(from, to)};
-    removeUsedByteRangeFromExtractionBuffer(until.first);
+    const auto extractionResult{tryExtractingScanFromByteRange(from, to)};
+    const auto until{std::get<0>(extractionResult)};
+    const auto numberOfBytesToTransfer{std::get<1>(extractionResult)};
+    const auto &sizeOfAFullScan{std::get<2>(extractionResult)};
+    removeUsedByteRangeFromExtractionBufferBeginningUntil(until);
+    if (sizeOfAFullScan) {
+        resizeReceptionAndExtractionBuffers(*sizeOfAFullScan);
+    }
     boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
-                            boost::asio::transfer_exactly(until.second),
+                            boost::asio::transfer_exactly(numberOfBytesToTransfer),
                             [&](const auto &error, const auto byteTransferred) {
                                 onBytesReceived(error, byteTransferred);
                             });
