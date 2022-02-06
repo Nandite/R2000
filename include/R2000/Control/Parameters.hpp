@@ -360,13 +360,15 @@ namespace Device::Parameters {
                                             base64Logo,
                                             PARAMETER_HMI_STATIC_LOGO);
 
-            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiStaticText1, ParametersRequestBuilderImpl &, const std::string&,
-                                            line,
-                                            PARAMETER_HMI_STATIC_TEXT_1);
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withHmiStaticText1, ParametersRequestBuilderImpl &,
+                                                           const std::string&,
+                                                           line, encoreSpaceInUrl(std::cbegin(line), std::cend(line)),
+                                                           PARAMETER_HMI_STATIC_TEXT_1);
 
-            ADD_RW_PARAMETER_BUILDER_METHOD(withHmiStaticText2, ParametersRequestBuilderImpl &, const std::string&,
-                                            line,
-                                            PARAMETER_HMI_STATIC_TEXT_2);
+            ADD_RW_PARAMETER_BUILDER_METHOD_WITH_TRANSFORM(withHmiStaticText2, ParametersRequestBuilderImpl &,
+                                                           const std::string&,
+                                                           line, encoreSpaceInUrl(std::cbegin(line), std::cend(line)),
+                                                           PARAMETER_HMI_STATIC_TEXT_2);
 
             ADD_RW_PARAMETER_BUILDER_METHOD(withHmiApplicationBitmap, ParametersRequestBuilderImpl &,
                                             const std::string&,
