@@ -12,13 +12,13 @@
 #include "Backtrace.hpp"
 
 using namespace std::chrono_literals;
-namespace basio = boost::asio;
 
 /**
- *
- * @param device
- * @param status
- * @return
+ * Format a device status into a human readable string.
+ * @param device The device owning the status.
+ * @param status The status of the device.
+ * @param version The version of the device.
+ * @return The formatted string.
  */
 std::string
 formatDeviceStatus(const Device::R2000 &device, const Device::DeviceStatus &status, Device::Parameters::PFSDP version) {
@@ -78,13 +78,17 @@ formatDeviceStatus(const Device::R2000 &device, const Device::DeviceStatus &stat
     return stream.str();
 }
 
+bool interruptProgram{false};
+
+void interrupt(int) {
+    interruptProgram = true;
+}
+
 int main(int argc, char **argv) {
-    std::signal(SIGSEGV, Backtrace::printBacktraceAndExitHandler);
-    std::signal(SIGABRT, Backtrace::printBacktraceAndExitHandler);
-    std::signal(SIGILL, Backtrace::printBacktraceAndExitHandler);
-    std::signal(SIGFPE, Backtrace::printBacktraceAndExitHandler);
-    std::signal(SIGPIPE, Backtrace::printBacktraceAndExitHandler);
-    std::signal(SIGTERM, Backtrace::printBacktraceAndExitHandler);
+
+    std::signal(SIGTERM, interrupt);
+    std::signal(SIGKILL, interrupt);
+    std::signal(SIGINT, interrupt);
 
     boost::program_options::variables_map programOptions{};
     boost::program_options::options_description programOptionsDescriptions{
@@ -124,14 +128,14 @@ int main(int argc, char **argv) {
     const auto period{1s};
     std::unique_ptr<Device::StatusWatcher> statusWatcher{nullptr};
     if (outputPath.empty()) {
-        auto onStatusReceived{[&device, deviceVersion](const Device::DeviceStatus &status) -> void {
+        auto onStatusReceived{[&device, deviceVersion](const auto &status) -> void {
             const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
             std::cout << statusAsString << std::endl;
         }};
         statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
         statusWatcher->addOnStatusAvailableCallback(onStatusReceived);
     } else {
-        auto onStatusReceived{[&device, &outputPath, deviceVersion](const Device::DeviceStatus &status) -> void {
+        auto onStatusReceived{[&device, &outputPath, deviceVersion](const auto &status) -> void {
             const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
             std::ofstream stream(outputPath, std::ios::trunc);
             if (!stream.is_open())
@@ -141,11 +145,10 @@ int main(int argc, char **argv) {
         statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
         statusWatcher->addOnStatusAvailableCallback(onStatusReceived);
     }
-    std::this_thread::sleep_for(2s);
-    if (!statusWatcher->isAlive()) {
-        std::clog << "Could not establish status link with sensor at " << device->getHostname() << std::endl;
+    while (!interruptProgram) {
+        std::this_thread::sleep_for(1s);
     }
-    std::this_thread::sleep_for(5h);
+    std::cout << std::endl << "Stopping device watcher." << std::endl;
     return EXIT_SUCCESS;
 }
 

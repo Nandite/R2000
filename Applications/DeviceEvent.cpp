@@ -12,7 +12,6 @@
 #include "Backtrace.hpp"
 
 using namespace std::chrono_literals;
-namespace basio = boost::asio;
 
 /**
  * @param address The address to test.
@@ -25,11 +24,14 @@ namespace basio = boost::asio;
 }
 
 bool interruptProgram{false};
+
 void interrupt(int) {
     interruptProgram = true;
 }
 
 int main(int argc, char **argv) {
+
+    std::signal(SIGTERM, interrupt);
     std::signal(SIGKILL, interrupt);
     std::signal(SIGINT, interrupt);
 
