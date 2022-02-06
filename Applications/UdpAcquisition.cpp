@@ -1,4 +1,3 @@
-#include "Backtrace.hpp"
 #include "R2000/Control/Parameters.hpp"
 #include "R2000/DataLink/DataLink.hpp"
 #include "R2000/DataLink/DataLinkBuilder.hpp"

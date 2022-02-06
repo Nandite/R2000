@@ -60,7 +60,6 @@ target_link_libraries(UdpAcquisition
 add_executable(DeviceWatcher include
         src/R2000/R2000.cpp
         src/R2000/StatusWatcher.cpp
-        src/Backtrace.cpp
         Applications/DeviceWatcher.cpp)
 target_link_libraries(DeviceWatcher
         ${CMAKE_DL_LIBS}
@@ -69,7 +68,6 @@ target_link_libraries(DeviceWatcher
 
 add_executable(DeviceEvent include
         src/R2000/R2000.cpp
-        src/Backtrace.cpp
         src/R2000/StatusWatcher.cpp
         Applications/DeviceEvent.cpp)
 target_link_libraries(DeviceEvent
