@@ -18,7 +18,6 @@ Device::TCPLink::TCPLink(std::shared_ptr<R2000> iDevice,
     asynchronousResolveEndpoints();
     ioServiceTask = std::async(std::launch::async, [&]() {
         ioService.run();
-        std::clog << device->getName() << "::TCPLink::Exiting io service task" << std::endl;
     });
 }
 

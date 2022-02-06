@@ -47,7 +47,6 @@ Device::UDPLink::UDPLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceH
                                   });
         ioServiceTask = std::async(std::launch::async, [&]() {
             ioService.run();
-            std::clog << device->getName() << "::UDPLink::Exiting io service task" << std::endl;
         });
     }
 }

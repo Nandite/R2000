@@ -287,6 +287,8 @@ namespace Device {
         using Cv = std::condition_variable;
         using RealtimeStatus = farbot::RealtimeObject<DeviceStatus, farbot::RealtimeObjectOptions::realtimeMutatable>;
         using OnStatusAvailableCallback = std::function<void(const DeviceStatus &)>;
+        using OnDeviceConnected = std::function<void(void)>;
+        using OnDeviceDisconnected = std::function<void(void)>;
 
     public:
         /**
@@ -303,9 +305,25 @@ namespace Device {
         /**
          * @param callback a callback to execute when a new update status is available.
          */
-        [[maybe_unused]] inline void addCallback(OnStatusAvailableCallback callback) {
-            std::unique_lock<LockType> guard{callbackLock, std::adopt_lock};
-            callbacks.push_back(std::move(callback));
+        [[maybe_unused]] inline void addOnStatusAvailableCallback(OnStatusAvailableCallback callback) {
+            std::unique_lock<LockType> guard{statusCallbackLock, std::adopt_lock};
+            onStatusAvailableCallbacks.push_back(std::move(callback));
+        }
+
+        /**
+         * @param callback a callback to execute when the device has connected.
+         */
+        [[maybe_unused]] inline void addOnDeviceConnectedCallback(OnDeviceConnected callback) {
+            std::unique_lock<LockType> guard{deviceConnectedCallbackLock, std::adopt_lock};
+            onDeviceConnectedCallbacks.push_back(std::move(callback));
+        }
+
+        /**
+         * @param callback a callback to execute when the device has disconnected.
+         */
+        [[maybe_unused]] inline void addOnDeviceDisconnectedCallback(OnDeviceDisconnected callback) {
+            std::unique_lock<LockType> guard{deviceDisconnectedCallbackLock, std::adopt_lock};
+            onDeviceDisconnectedCallbacks.push_back(std::move(callback));
         }
 
         /**
@@ -328,19 +346,58 @@ namespace Device {
          */
         void statusWatcherTask();
 
+        /**
+         * Set a new status to the output of this instance and call all the callbacks registered to
+         * the new status event.
+         * @param status The new status obtained from the device.
+         */
+        inline void setStatusToOutputAndFireNewStatusEvent(const DeviceStatus &status) {
+            {
+                RealtimeStatus::ScopedAccess <farbot::ThreadType::realtime> scanGuard{*realtimeStatus};
+                *scanGuard = status;
+            }
+            std::unique_lock<LockType> guard{statusCallbackLock, std::adopt_lock};
+            for (auto &callback : onStatusAvailableCallbacks) {
+                std::invoke(callback, status);
+            }
+        }
+
+        /**
+         * Call all the connection callbacks currently registered.
+         */
+        inline void fireDeviceConnectionEvent() {
+            std::unique_lock<LockType> guard{deviceConnectedCallbackLock, std::adopt_lock};
+            for (auto &callback : onDeviceConnectedCallbacks) {
+                std::invoke(callback);
+            }
+        }
+
+        /**
+         * Call all the disconnection callbacks currently registered.
+         */
+        inline void fireDeviceDisconnectionEvent() {
+            std::unique_lock<LockType> guard{deviceDisconnectedCallbackLock, std::adopt_lock};
+            for (auto &callback : onDeviceDisconnectedCallbacks) {
+                std::invoke(callback);
+            }
+        }
+
     private:
         std::shared_ptr<R2000> device{nullptr};
         std::unique_ptr<RealtimeStatus> realtimeStatus{std::make_unique<RealtimeStatus>(DeviceStatus{})};
         std::future<void> statusWatcherTaskFuture{};
         Cv interruptCv{};
         LockType interruptCvLock{};
-        LockType callbackLock{};
+        LockType statusCallbackLock{};
+        LockType deviceConnectedCallbackLock{};
+        LockType deviceDisconnectedCallbackLock{};
         std::atomic_bool interruptFlag{false};
         std::chrono::seconds period{};
-        std::vector<OnStatusAvailableCallback> callbacks{};
+        std::vector<OnStatusAvailableCallback> onStatusAvailableCallbacks{};
+        std::vector<OnDeviceConnected> onDeviceConnectedCallbacks{};
+        std::vector<OnDeviceDisconnected> onDeviceDisconnectedCallbacks{};
         std::atomic_bool isConnected{false};
         const Parameters::ReadOnlyParameters::SystemStatus systemStatus{Parameters::ReadOnlyParameters::SystemStatus{}
-                                                                                .requestStatusFlags()
                                                                                 .requestLoadIndication()
                                                                                 .requestSystemTimeRaw()
                                                                                 .requestUpTime()
@@ -349,6 +406,7 @@ namespace Device {
                                                                                 .requestOperationTimeScaled()
                                                                                 .requestCurrentTemperature()
                                                                                 .requestMinimalTemperature()
-                                                                                .requestMaximalTemperature()};
+                                                                                .requestMaximalTemperature()
+                                                                                .requestStatusFlags()};
     };
 } // namespace Device

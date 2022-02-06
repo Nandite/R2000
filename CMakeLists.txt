@@ -31,16 +31,27 @@ link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 ############################################################################
 
-add_executable(ScanAcquisition include
+add_executable(TcpAcquisition include
         src/R2000/DataLink/DataLinkBuilder.cpp
         src/R2000/DataLink/DataLink.cpp
         src/R2000/DataLink/TCPLink.cpp
         src/R2000/DataLink/UDPLink.cpp
         src/R2000/R2000.cpp
-        src/R2000/StatusWatcher.cpp
-        src/Backtrace.cpp
-        ScanAcquisition.cpp)
-target_link_libraries(ScanAcquisition
+        Applications/TcpAcquisition.cpp)
+target_link_libraries(TcpAcquisition
+        ${CMAKE_DL_LIBS}
+        ${Boost_LIBRARIES}
+        ${Boost_PROGRAM_OPTIONS_LIBRARIES}
+        ${PCL_LIBRARIES})
+
+add_executable(UdpAcquisition include
+        src/R2000/DataLink/DataLinkBuilder.cpp
+        src/R2000/DataLink/DataLink.cpp
+        src/R2000/DataLink/TCPLink.cpp
+        src/R2000/DataLink/UDPLink.cpp
+        src/R2000/R2000.cpp
+        Applications/UdpAcquisition.cpp)
+target_link_libraries(UdpAcquisition
         ${CMAKE_DL_LIBS}
         ${Boost_LIBRARIES}
         ${Boost_PROGRAM_OPTIONS_LIBRARIES}
@@ -50,17 +61,18 @@ add_executable(DeviceWatcher include
         src/R2000/R2000.cpp
         src/R2000/StatusWatcher.cpp
         src/Backtrace.cpp
-        DeviceWatcher.cpp)
+        Applications/DeviceWatcher.cpp)
 target_link_libraries(DeviceWatcher
         ${CMAKE_DL_LIBS}
         ${Boost_PROGRAM_OPTIONS_LIBRARIES}
         ${Boost_LIBRARIES})
 
-add_executable(AsyncCommand include
+add_executable(DeviceEvent include
         src/R2000/R2000.cpp
         src/Backtrace.cpp
-        AsyncCommand.cpp include/R2000/Worker.hpp include/R2000/Control/Commands.hpp include/R2000/Control/Parameters.hpp include/R2000/NotImplementedException.hpp)
-target_link_libraries(AsyncCommand
+        src/R2000/StatusWatcher.cpp
+        Applications/DeviceEvent.cpp)
+target_link_libraries(DeviceEvent
         ${CMAKE_DL_LIBS}
         ${Boost_PROGRAM_OPTIONS_LIBRARIES}
         ${Boost_LIBRARIES})

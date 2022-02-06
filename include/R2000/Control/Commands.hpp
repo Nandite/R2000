@@ -151,13 +151,12 @@ namespace Device::Commands {
              * - a list of commands available to execute with de device.
              */
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
-                const auto request{device.sendHttpCommand(COMMAND_GET_PROTOCOL_INFO)};
-                const auto requestResult{request.first};
-                if (requestResult != Device::RequestResult::SUCCESS) {
-                    return {requestResult, {}, {}};
+                const auto deviceAnswer{device.sendHttpCommand(COMMAND_GET_PROTOCOL_INFO)};
+                if (deviceAnswer) {
+                    return {deviceAnswer.getRequestResult(), {}, {}};
                 }
-                const auto info{extractInfoFromPropertyTree(request.second)};
-                return {requestResult, info.first, info.second};
+                const auto info{extractInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
+                return {deviceAnswer.getRequestResult(), info.first, info.second};
             }
 
             /**
@@ -169,7 +168,7 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] std::optional<std::future<ResultType>>
             asyncExecute(std::chrono::milliseconds timeout) {
                 auto promise{std::make_shared<std::promise<ResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     if (!result) {
                         promise->set_value({result.getRequestResult(), {}, {}});
                         return;
@@ -193,13 +192,13 @@ namespace Device::Commands {
                                                std::function<void(const ResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_GET_PROTOCOL_INFO,
-                        [c = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             if (!result) {
-                                std::invoke(c, ResultType{result.getRequestResult(), {}, {}});
+                                std::invoke(fn, ResultType{result.getRequestResult(), {}, {}});
                                 return;
                             }
                             const auto info{extractInfoFromPropertyTree(result.getPropertyTree())};
-                            std::invoke(c, ResultType{result.getRequestResult(), info.first, info.second});
+                            std::invoke(fn, ResultType{result.getRequestResult(), info.first, info.second});
                         },
                         timeout);
             }
@@ -393,9 +392,9 @@ namespace Device::Commands {
                               "All the provided handle must be of type DeviceHandle");
                 std::vector<Device::RequestResult> requestResults{};
                 RecursiveExecutorHelper::resolve([&](const auto &handle) -> void {
-                                                     auto result{device.sendHttpCommand(COMMAND_RELEASE_HANDLE, PARAMETER_NAME_HANDLE,
-                                                                                        handle.value)};
-                                                     requestResults.push_back(result.first);
+                                                     auto deviceAnswer{device.sendHttpCommand(COMMAND_RELEASE_HANDLE, PARAMETER_NAME_HANDLE,
+                                                                                              handle.value)};
+                                                     requestResults.push_back(deviceAnswer.getRequestResult());
                                                  },
                                                  std::forward<Args>(args)...);
                 return requestResults;
@@ -411,7 +410,7 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] std::optional<std::future<AsyncResultType>>
             asyncExecute(const Device::DeviceHandle &handle, std::chrono::milliseconds timeout) {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     promise->set_value(result.getRequestResult());
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_RELEASE_HANDLE, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
@@ -432,7 +431,7 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_RELEASE_HANDLE, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 std::invoke(fn, AsyncResultType{result.getRequestResult()});
                                 return;
@@ -470,9 +469,9 @@ namespace Device::Commands {
                 std::vector<Device::RequestResult> requestResults{};
                 RecursiveExecutorHelper::resolve(
                         [&](const auto &handle) -> void {
-                            auto result{device.sendHttpCommand(COMMAND_START_SCAN_OUTPUT, PARAMETER_NAME_HANDLE,
-                                                               handle.value)};
-                            requestResults.push_back(result.first);
+                            auto deviceAnswer{device.sendHttpCommand(COMMAND_START_SCAN_OUTPUT, PARAMETER_NAME_HANDLE,
+                                                                     handle.value)};
+                            requestResults.push_back(deviceAnswer.getRequestResult());
                         },
                         std::forward<Args>(args)...);
                 return requestResults;
@@ -489,7 +488,7 @@ namespace Device::Commands {
             asyncExecute(const Device::DeviceHandle &handle,
                          std::chrono::milliseconds timeout) {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     promise->set_value(result.getRequestResult());
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_START_SCAN_OUTPUT, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
@@ -510,7 +509,7 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_START_SCAN_OUTPUT, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 std::invoke(fn, AsyncResultType{result.getRequestResult()});
                                 return;
@@ -548,9 +547,9 @@ namespace Device::Commands {
                 std::vector<Device::RequestResult> requestResults{};
                 RecursiveExecutorHelper::resolve(
                         [&](const auto &handle) -> void {
-                            auto result{device.sendHttpCommand(COMMAND_STOP_SCAN_OUTPUT, PARAMETER_NAME_HANDLE,
-                                                               handle.value)};
-                            requestResults.push_back(result.first);
+                            auto deviceAnswer{device.sendHttpCommand(COMMAND_STOP_SCAN_OUTPUT, PARAMETER_NAME_HANDLE,
+                                                                     handle.value)};
+                            requestResults.push_back(deviceAnswer.getRequestResult());
                         },
                         std::forward<Args>(args)...);
                 return requestResults;
@@ -567,7 +566,7 @@ namespace Device::Commands {
             asyncExecute(const Device::DeviceHandle &handle,
                          std::chrono::milliseconds timeout) {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     promise->set_value(result.getRequestResult());
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_STOP_SCAN_OUTPUT, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
@@ -588,7 +587,7 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_STOP_SCAN_OUTPUT, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 std::invoke(fn, AsyncResultType{result.getRequestResult()});
                                 return;
@@ -625,9 +624,9 @@ namespace Device::Commands {
                               "All the provided handle must be of type DeviceHandle");
                 std::vector<Device::RequestResult> requestResults{};
                 RecursiveExecutorHelper::resolve([&](const auto &handle) -> void {
-                                                     auto result{device.sendHttpCommand(COMMAND_FEED_WATCHDOG, PARAMETER_NAME_HANDLE,
-                                                                                        handle.value)};
-                                                     requestResults.push_back(result.first);
+                                                     auto deviceAnswer{device.sendHttpCommand(COMMAND_FEED_WATCHDOG, PARAMETER_NAME_HANDLE,
+                                                                                              handle.value)};
+                                                     requestResults.push_back(deviceAnswer.getRequestResult());
                                                  },
                                                  std::forward<Args>(args)...);
                 return requestResults;
@@ -644,7 +643,7 @@ namespace Device::Commands {
             asyncExecute(const Device::DeviceHandle &handle,
                          std::chrono::milliseconds timeout) {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     promise->set_value(result.getRequestResult());
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_FEED_WATCHDOG, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
@@ -666,7 +665,7 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_FEED_WATCHDOG, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 std::invoke(fn, AsyncResultType{result.getRequestResult()});
                                 return;
@@ -705,15 +704,14 @@ namespace Device::Commands {
                 Parameters::ParametersList parameters{};
                 ParametersChaining::template list(parameters, std::forward<Args>(args)...);
                 const auto parametersListAsString{chainAndConvertParametersToString(std::forward<Args>(args)...)};
-                const auto result{
+                const auto deviceAnswer{
                         device.sendHttpCommand(COMMAND_GET_PARAMETER, PARAMETER_NAME_LIST,
                                                parametersListAsString.first)};
-                const auto requestResult{result.first};
-                const auto propertyTree{result.second};
-                if (requestResult != Device::RequestResult::SUCCESS) {
-                    return {requestResult, {}};
+                if (deviceAnswer) {
+                    return {deviceAnswer.getRequestResult(), {}};
                 }
-                return {requestResult, extractParametersValues(parameters, propertyTree)};
+                return {deviceAnswer.getRequestResult(),
+                        extractParametersValues(parameters, deviceAnswer.getPropertyTree())};
             }
 
             /**
@@ -726,7 +724,7 @@ namespace Device::Commands {
              */
             template<typename... Args>
             [[nodiscard]] [[maybe_unused]] std::optional<std::future<AsyncResultType>>
-            asyncExecuteFuture(std::chrono::milliseconds timeout, Args &&... args) {
+            asyncExecute(std::chrono::milliseconds timeout, Args &&... args) {
                 static_assert(
                         std::conjunction_v<std::is_base_of<Parameters::ReadOnlyRequestBuilder, typename std::decay_t<Args>>...>,
                         "All the provided handle must be of type ReadOnlyRequestBuilder");
@@ -734,7 +732,7 @@ namespace Device::Commands {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
                 auto onComplete{
                         [promise, parameters = std::move(chainedParameters.second)](
-                                const Device::AsyncResult &result) -> void {
+                                const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 promise->set_value({result.getRequestResult(), {}});
                                 return;
@@ -768,7 +766,7 @@ namespace Device::Commands {
                 return device.asyncSendHttpCommand(
                         COMMAND_GET_PARAMETER, {{PARAMETER_NAME_LIST, chainedParameters}}, [fn = std::move(callable),
                                 parameters = std::move(chainedParameters.second)](
-                                const Device::AsyncResult &result) -> void {
+                                const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 std::invoke(fn, AsyncResultType{result.getRequestResult(), {}});
                                 return;
@@ -850,7 +848,8 @@ namespace Device::Commands {
                         "All the provided handle must be of type ReadWriteRequestBuilder");
                 Parameters::ParametersMap parameters{};
                 ParametersChaining::template map(parameters, std::forward<Args>(args)...);
-                return device.sendHttpCommand(COMMAND_SET_PARAMETER, parameters).first;
+                const auto deviceAnswer{device.sendHttpCommand(COMMAND_SET_PARAMETER, parameters)};
+                return deviceAnswer.getRequestResult();
             }
 
             /**
@@ -871,7 +870,7 @@ namespace Device::Commands {
                 Parameters::ParametersMap parameters{};
                 ParametersChaining::template map(parameters, std::forward<Args>(args)...);
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     promise->set_value(result.getRequestResult());
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_SET_PARAMETER, parameters, onComplete, timeout)) {
@@ -899,7 +898,7 @@ namespace Device::Commands {
                 ParametersChaining::template map(parameters, std::forward<Args>(args)...);
                 return device.asyncSendHttpCommand(
                         COMMAND_SET_PARAMETER, parameters,
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             std::invoke(fn, result.getRequestResult());
                         },
                         timeout);
@@ -926,13 +925,12 @@ namespace Device::Commands {
              * If the optional is empty, the device is already busy with another command.
              */
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
-                const auto result{device.sendHttpCommand(COMMAND_LIST_PARAMETERS)};
-                const auto requestResult{result.first};
-                const auto &propertyTree{result.second};
-                if (requestResult != Device::RequestResult::SUCCESS) {
-                    return {requestResult, {}};
+                const auto deviceAnswer{device.sendHttpCommand(COMMAND_LIST_PARAMETERS)};
+                if (deviceAnswer) {
+                    return {deviceAnswer.getRequestResult(), {}};
                 }
-                return {requestResult, extractParametersFromPropertyTree(propertyTree)};
+                return {deviceAnswer.getRequestResult(),
+                        extractParametersFromPropertyTree(deviceAnswer.getPropertyTree())};
             }
 
             /**
@@ -944,7 +942,7 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] std::optional<std::future<AsyncResultType>>
             asyncExecute(std::chrono::milliseconds timeout) {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     if (!result) {
                         promise->set_value({result.getRequestResult(), {}});
                         return;
@@ -968,7 +966,8 @@ namespace Device::Commands {
             [[maybe_unused]] bool asyncExecute(std::chrono::milliseconds timeout,
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
-                        COMMAND_LIST_PARAMETERS, [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        COMMAND_LIST_PARAMETERS,
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 std::invoke(fn, AsyncResultType{result.getRequestResult(), {}});
                                 return;
@@ -1027,7 +1026,8 @@ namespace Device::Commands {
                         std::conjunction_v<std::is_base_of<Parameters::ReadWriteRequestBuilder, typename std::decay_t<Args>>...>,
                         "All the provided handle must be of type ReadWriteRequestBuilder");
                 const auto params{chainAndConvertParametersToString(std::forward<Args>(args)...)};
-                return device.sendHttpCommand(COMMAND_RESET_PARAMETERS, PARAMETER_NAME_LIST, params).first;
+                const auto deviceAnswer{device.sendHttpCommand(COMMAND_RESET_PARAMETERS, PARAMETER_NAME_LIST, params)};
+                return deviceAnswer.getRequestResult();
             }
 
             /**
@@ -1047,7 +1047,7 @@ namespace Device::Commands {
                         "All the provided handle must be of type ReadWriteRequestBuilder");
                 const auto parameters{chainAndConvertParametersToString(std::forward<Args>(args)...)};
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     promise->set_value(result.getRequestResult());
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_RESET_PARAMETERS, {{PARAMETER_NAME_LIST, parameters}},
@@ -1076,7 +1076,7 @@ namespace Device::Commands {
                 const auto parameters{chainAndConvertParametersToString(std::forward<Args>(args)...)};
                 return device.asyncSendHttpCommand(
                         COMMAND_RESET_PARAMETERS, {{PARAMETER_NAME_LIST, parameters}},
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             std::invoke(fn, result.getRequestResult());
                         },
                         timeout);
@@ -1122,7 +1122,8 @@ namespace Device::Commands {
              * @return True if device has been reset, False otherwise.
              */
             [[nodiscard]] [[maybe_unused]] inline ResultType execute() {
-                return device.sendHttpCommand(COMMAND_FACTORY_RESET).first;
+                const auto deviceAnswer{device.sendHttpCommand(COMMAND_FACTORY_RESET)};
+                return deviceAnswer.getRequestResult();
             }
 
             /**
@@ -1134,7 +1135,7 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] std::optional<std::future<AsyncResultType>>
             asyncExecute(std::chrono::milliseconds timeout) {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     promise->set_value(result.getRequestResult());
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_FACTORY_RESET, onComplete, timeout)) {
@@ -1153,7 +1154,7 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_FACTORY_RESET,
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             std::invoke(fn, result.getRequestResult());
                         },
                         timeout);
@@ -1179,7 +1180,8 @@ namespace Device::Commands {
              * @return True if the device has been rebooted, False otherwise.
              */
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
-                return device.sendHttpCommand(COMMAND_REBOOT_DEVICE).first;
+                const auto deviceAnswer{device.sendHttpCommand(COMMAND_REBOOT_DEVICE)};
+                return deviceAnswer.getRequestResult();
             }
 
             /**
@@ -1191,7 +1193,7 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] std::optional<std::future<AsyncResultType>>
             asyncExecute(std::chrono::milliseconds timeout) {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     promise->set_value(result.getRequestResult());
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_REBOOT_DEVICE, onComplete, timeout)) {
@@ -1210,7 +1212,7 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_REBOOT_DEVICE,
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             std::invoke(fn, AsyncResultType{result.getRequestResult()});
                         },
                         timeout);
@@ -1242,14 +1244,12 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] ResultType
             execute(const Parameters::ReadWriteParameters::TcpHandle &builder) {
                 const auto parameters{builder.build()};
-                const auto result{device.sendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters)};
-                const auto requestCode{result.first};
-                const auto &propertyTree{result.second};
-                if (requestCode != Device::RequestResult::SUCCESS) {
-                    return {requestCode, {}, {}};
+                const auto deviceAnswer{device.sendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters)};
+                if (deviceAnswer) {
+                    return {deviceAnswer.getRequestResult(), {}, {}};
                 }
-                const auto handle{extractHandleInfoFromPropertyTree(propertyTree)};
-                return {requestCode, handle.first, handle.second};
+                const auto handle{extractHandleInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
+                return {deviceAnswer.getRequestResult(), handle.first, handle.second};
             }
 
             /**
@@ -1263,7 +1263,7 @@ namespace Device::Commands {
             asyncExecute(const Parameters::ReadWriteParameters::TcpHandle &builder, std::chrono::milliseconds timeout) {
                 const auto parameters{builder.build()};
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     if (!result) {
                         promise->set_value({result.getRequestResult(), {}, {}});
                         return;
@@ -1290,7 +1290,7 @@ namespace Device::Commands {
                 const auto parameters{builder.build()};
                 return device.asyncSendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters,
                                                    [fn = std::move(callable)](
-                                                           const Device::AsyncResult &result) -> void {
+                                                           const Device::DeviceAnswer &result) -> void {
                                                        if (!result) {
                                                            std::invoke(fn,
                                                                        AsyncResultType{result.getRequestResult(), {},
@@ -1343,14 +1343,12 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] ResultType
             execute(const Parameters::ReadWriteParameters::UdpHandle &builder) {
                 const auto parameters{builder.build()};
-                const auto result{device.sendHttpCommand(COMMAND_REQUEST_UDP_HANDLE, parameters)};
-                const auto requestResult{result.first};
-                const auto propertyTree{result.second};
-                if (requestResult != Device::RequestResult::SUCCESS) {
-                    return {requestResult, {}};
+                const auto deviceAnswer{device.sendHttpCommand(COMMAND_REQUEST_UDP_HANDLE, parameters)};
+                if (deviceAnswer) {
+                    return {deviceAnswer.getRequestResult(), {}};
                 }
-                const auto handle{extractHandleInfoFromPropertyTree(propertyTree)};
-                return {requestResult, handle};
+                const auto handle{extractHandleInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
+                return {deviceAnswer.getRequestResult(), handle};
             }
 
             /**
@@ -1364,7 +1362,7 @@ namespace Device::Commands {
             asyncExecute(const Parameters::ReadWriteParameters::UdpHandle &builder, std::chrono::milliseconds timeout) {
                 const auto parameters{builder.build()};
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     if (!result) {
                         promise->set_value({result.getRequestResult(), {}});
                         return;
@@ -1391,7 +1389,7 @@ namespace Device::Commands {
                 const auto parameters{builder.build()};
                 return device.asyncSendHttpCommand(
                         COMMAND_REQUEST_UDP_HANDLE, parameters,
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 std::invoke(fn, AsyncResultType{result.getRequestResult(), {}});
                                 return;
@@ -1463,7 +1461,7 @@ namespace Device::Commands {
             [[nodiscard]] [[maybe_unused]] std::optional<std::future<AsyncResultType>>
             asyncExecute(const Device::DeviceHandle &handle, std::chrono::milliseconds timeout) {
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     if (!result) {
                         promise->set_value({result.getRequestResult(), std::nullopt});
                         return;
@@ -1491,7 +1489,7 @@ namespace Device::Commands {
                                                std::function<void(const AsyncResultType &)> callable) {
                 return device.asyncSendHttpCommand(
                         COMMAND_GET_SCAN_OUTPUT_CONFIG, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             const auto asyncResultValue{result.getRequestResult()};
                             if (!result) {
                                 std::invoke(fn, AsyncResultType{asyncResultValue, std::nullopt});
@@ -1571,7 +1569,7 @@ namespace Device::Commands {
             asyncExecute(const Parameters::HandleParameters &builder, std::chrono::milliseconds timeout) {
                 const auto parameters{builder.build()};
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
-                auto onComplete{[promise](const Device::AsyncResult &result) -> void {
+                auto onComplete{[promise](const Device::DeviceAnswer &result) -> void {
                     promise->set_value(result.getRequestResult());
                 }};
 
@@ -1594,7 +1592,7 @@ namespace Device::Commands {
                 const auto parameters{builder.build()};
                 return device.asyncSendHttpCommand(
                         COMMAND_SET_SCAN_OUTPUT_CONFIG, parameters,
-                        [fn = std::move(callable)](const Device::AsyncResult &result) -> void {
+                        [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             std::invoke(fn, result.getRequestResult());
                         },
                         timeout);

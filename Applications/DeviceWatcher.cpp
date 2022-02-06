@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
             std::cout << statusAsString << std::endl;
         }};
         statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
-        statusWatcher->addCallback(onStatusReceived);
+        statusWatcher->addOnStatusAvailableCallback(onStatusReceived);
     } else {
         auto onStatusReceived{[&device, &outputPath, deviceVersion](const Device::DeviceStatus &status) -> void {
             const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
             stream << statusAsString << std::endl;
         }};
         statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
-        statusWatcher->addCallback(onStatusReceived);
+        statusWatcher->addOnStatusAvailableCallback(onStatusReceived);
     }
     std::this_thread::sleep_for(2s);
     if (!statusWatcher->isAlive()) {
