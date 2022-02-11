@@ -300,7 +300,7 @@ namespace Device {
         /**
          * @return True if the connection to the device is alive, False otherwise.
          */
-        [[nodiscard]] inline bool isAlive() const { return isConnected.load(std::memory_order_acquire); }
+        [[maybe_unused]] [[nodiscard]] inline bool isAlive() const { return isConnected.load(std::memory_order_acquire); }
 
         /**
          * @param callback a callback to execute when a new update status is available.

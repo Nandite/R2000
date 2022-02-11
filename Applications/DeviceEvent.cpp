@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     }
     const auto deviceAddress{programOptions["address"].as<std::string>()};
     if (!isValidIpv4(deviceAddress)) {
-        std::clog << "You must specify a valid ipv4 device address (" << deviceAddress << ")." << std::endl;
+        std::clog << "You must specify a valid IPV4 device address (" << deviceAddress << ")." << std::endl;
         return EXIT_FAILURE;
     }
 

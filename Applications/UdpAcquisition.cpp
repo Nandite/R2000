@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     if (!isValidIpv4(deviceAddressAsString)) {
-        std::clog << "You must specify a valid ipv4 device address (" << deviceAddressAsString << ")." << std::endl;
+        std::clog << "You must specify a valid IPV4 device address (" << deviceAddressAsString << ")." << std::endl;
         return EXIT_FAILURE;
     }
     const auto target{splitAddressAndPort(programOptions["target"].as<std::string>())};
@@ -197,7 +197,6 @@ int main(int argc, char **argv) {
                   << Device::asyncResultToString(asyncRequestResult) << ")." << std::endl;
         return EXIT_FAILURE;
     }
-    std::shared_ptr<Device::DataLink> dataLink{buildResult.second};
 
     const auto port{0};
     pcl::visualization::PCLVisualizer viewer{"Scan viewer"};
@@ -206,16 +205,25 @@ int main(int argc, char **argv) {
     viewer.addCoordinateSystem(150.0f, 0.0f, 0.0f, 0.0f, "Zero");
     PointCloud::ScanToPointCloud<Point> converter{SAMPLES_PER_SCAN, -M_PI};
 
-    while (!viewer.wasStopped() && !interruptProgram) {
-        viewer.spinOnce();
-        const auto &scan{dataLink->waitForNextScan(250ms)};
-        if (!dataLink->isAlive()) {
-            std::clog << "A disconnection of the sensor, or a network error has occurred." << std::endl;
-            break;
-        }
-        if (!scan) {
+    std::atomic_bool deviceHasDisconnected{false};
+    Device::DataLink::SharedScan sharedScan{{}};
+    std::shared_ptr<Device::DataLink> dataLink{buildResult.second};
+    dataLink->addOnDataLinkConnectionLostCallback([&deviceHasDisconnected]() {
+        std::clog << "A disconnection of the sensor, or a network error has occurred." << std::endl;
+        deviceHasDisconnected.store(true, std::memory_order_release);
+    });
+    dataLink->addOnNewScanAvailableCallback([&sharedScan](Device::DataLink::SharedScan newScan) {
+        std::atomic_store_explicit(&sharedScan, std::move(newScan), std::memory_order_release);
+    });
+
+    auto timestamp{std::chrono::steady_clock::now()};
+    while (!viewer.wasStopped() && !interruptProgram && !deviceHasDisconnected.load(std::memory_order_acquire)) {
+        viewer.spinOnce(50);
+        const auto scan{std::atomic_load_explicit(&sharedScan, std::memory_order_acquire)};
+        if (!scan || (scan->getTimestamp() == timestamp)) {
             continue;
         }
+        timestamp = scan->getTimestamp();
         pcl::PointCloud<Point>::Ptr cloud{new pcl::PointCloud<Point>};
         converter.convert(*scan, *cloud);
         PointCloudColorHandler scannedCloudColor{cloud, 0, 240, 0};

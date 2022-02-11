@@ -13,6 +13,8 @@
 #include <pcl/visualization/pcl_visualizer.h>
 #include <thread>
 #include <R2000/StatusWatcher.hpp>
+#include <experimental/memory>
+#include <utility>
 
 #define FREQUENCY 35
 #define SAMPLES_PER_SCAN 7200
@@ -51,7 +53,7 @@ int main(int argc, char **argv) {
 
     boost::program_options::variables_map programOptions{};
     boost::program_options::options_description programOptionsDescriptions{
-            "Perform a continuous TCP scan data acquisition from a R2000 sensor and display it", 1024, 512};
+            "Perform a continuous TCP sharedScan data acquisition from a R2000 sensor and display it", 1024, 512};
     programOptionsDescriptions.add_options()("help,h", "Print out how to use the program")
             ("address,a", boost::program_options::value<std::string>()->required(), "Address of the device.");
     try {
@@ -88,7 +90,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     if (!isValidIpv4(deviceAddressAsString)) {
-        std::clog << "You must specify a valid ipv4 device address (" << deviceAddressAsString << ")." << std::endl;
+        std::clog << "You must specify a valid IPV4 device address (" << deviceAddressAsString << ")." << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -136,7 +138,6 @@ int main(int argc, char **argv) {
                   << Device::asyncResultToString(asyncRequestResult) << ")." << std::endl;
         return EXIT_FAILURE;
     }
-    std::shared_ptr<Device::DataLink> dataLink{buildResult.second};
 
     const auto port{0};
     pcl::visualization::PCLVisualizer viewer{"Scan viewer"};
@@ -145,16 +146,25 @@ int main(int argc, char **argv) {
     viewer.addCoordinateSystem(150.0f, 0.0f, 0.0f, 0.0f, "Zero");
     PointCloud::ScanToPointCloud<Point> converter{SAMPLES_PER_SCAN, -M_PI};
 
-    while (!viewer.wasStopped() && !interruptProgram) {
-        viewer.spinOnce();
-        const auto &scan{dataLink->waitForNextScan(250ms)};
-        if (!dataLink->isAlive()) {
-            std::clog << "A disconnection of the sensor, or a network error has occurred." << std::endl;
-            break;
-        }
-        if (!scan) {
+    std::atomic_bool deviceHasDisconnected{false};
+    Device::DataLink::SharedScan sharedScan{{}};
+    std::shared_ptr<Device::DataLink> dataLink{buildResult.second};
+    dataLink->addOnDataLinkConnectionLostCallback([&deviceHasDisconnected]() {
+        std::clog << "A disconnection of the sensor, or a network error has occurred." << std::endl;
+        deviceHasDisconnected.store(true, std::memory_order_release);
+    });
+    dataLink->addOnNewScanAvailableCallback([&sharedScan](Device::DataLink::SharedScan newScan) {
+        std::atomic_store_explicit(&sharedScan, std::move(newScan), std::memory_order_release);
+    });
+
+    auto timestamp{std::chrono::steady_clock::now()};
+    while (!viewer.wasStopped() && !interruptProgram && !deviceHasDisconnected.load(std::memory_order_acquire)) {
+        viewer.spinOnce(50);
+        const auto scan{std::atomic_load_explicit(&sharedScan, std::memory_order_acquire)};
+        if (!scan || (scan->getTimestamp() == timestamp)) {
             continue;
         }
+        timestamp = scan->getTimestamp();
         pcl::PointCloud<Point>::Ptr cloud{new pcl::PointCloud<Point>};
         converter.convert(*scan, *cloud);
         PointCloudColorHandler scannedCloudColor{cloud, 0, 240, 0};

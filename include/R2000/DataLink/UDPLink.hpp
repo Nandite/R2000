@@ -58,7 +58,7 @@ namespace Device {
              * @return Assembles and returns a scan from the stored packets. Subsequent call to this method will not
              * yield a scan as the internals buffers are cleared every time this function is called.
              */
-            inline Data::Scan operator*() override {
+            inline SharedScan operator*() override {
                 std::sort(std::begin(packets),
                           std::end(packets),
                           [](const Packet &lhs, const Packet &rhs) {
@@ -72,7 +72,7 @@ namespace Device {
                 accumulatedHeaders.reserve(numberOfHeaders);
                 accumulatedAmplitudes.reserve(numberOfPoints);
                 accumulatedAmplitudes.reserve(numberOfPoints);
-                for (const auto &packet : packets) {
+                for (const auto &packet: packets) {
                     const auto &header{std::get<0>(packet)};
                     const auto &distances{std::get<1>(packet)};
                     const auto &amplitudes{std::get<2>(packet)};
@@ -82,9 +82,11 @@ namespace Device {
                     accumulatedAmplitudes.insert(std::end(accumulatedAmplitudes),
                                                  std::cbegin(amplitudes), std::cend(amplitudes));
                 }
+                auto scan{
+                        std::make_shared<Data::Scan>(accumulatedDistances, accumulatedAmplitudes, accumulatedHeaders,
+                                                     std::chrono::steady_clock::now())};
                 clear();
-                return {accumulatedDistances, accumulatedAmplitudes, accumulatedHeaders,
-                        std::chrono::steady_clock::now()};
+                return scan;
             }
 
             /**
@@ -121,7 +123,7 @@ namespace Device {
                     return;
                 }
                 outputHeaders.reserve(packets.size());
-                for (const auto &packet : packets) {
+                for (const auto &packet: packets) {
                     const auto &header{std::get<0>(packet)};
                     outputHeaders.emplace_back(header);
                 }

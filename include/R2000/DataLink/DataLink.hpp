@@ -284,6 +284,10 @@ namespace Device {
         };
     } // namespace internals
     class DataLink {
+    public:
+        using SharedScan = std::shared_ptr<Data::Scan>;
+        using OnDataLinkConnectionLost = std::function<void()>;
+        using OnNewScanAvailable = std::function<void(SharedScan)>;
     protected:
 
         /**
@@ -320,7 +324,7 @@ namespace Device {
              * this method must return a full scan. Subsequent call of this method may not return a complete scan as
              * the internal stored packets can be flushed after a scan is assembled.
              */
-            virtual inline Data::Scan operator*() = 0;
+            virtual inline SharedScan operator*() = 0;
 
             /**
              * Clear any packet stored by the factory and prepare it to store packets from a different scan.
@@ -365,8 +369,8 @@ namespace Device {
 
     protected:
         using LockType = std::mutex;
-        using Cv = std::condition_variable;
-        using RealtimeScan = farbot::RealtimeObject<Data::Scan, farbot::RealtimeObjectOptions::realtimeMutatable>;
+        using ConditionVariable = std::condition_variable;
+        //using RealtimeScan = farbot::RealtimeObject<SharedScan, farbot::RealtimeObjectOptions::realtimeMutatable>;
         static constexpr unsigned int MAX_RESERVE_POINTS_BUFFER{1024u};
     protected:
 
@@ -467,9 +471,10 @@ namespace Device {
         /**
          * @return The last scan received by this DataLink. This method is wait-free and lock-free.
          */
-        [[maybe_unused]] [[nodiscard]] virtual inline Device::Data::Scan getLastScan() const {
-            RealtimeScan::ScopedAccess <farbot::ThreadType::nonRealtime> scanGuard{*realtimeScan};
-            return *scanGuard;
+        [[maybe_unused]] [[nodiscard]] virtual inline SharedScan getLastScan() const {
+            //RealtimeScan::ScopedAccess <farbot::ThreadType::nonRealtime> scanGuard{realtimeScan};
+            //return *scanGuard;
+            return std::atomic_load_explicit(&lastScanReceived, std::memory_order_acquire);
         };
 
         /**
@@ -482,7 +487,7 @@ namespace Device {
          * - The scan received. If the flag is False, an empty scan is set to this field.
          */
         template<typename Duration>
-        [[maybe_unused]] [[nodiscard]] inline std::optional<Device::Data::Scan> waitForNextScan(Duration timeout) {
+        [[maybe_unused]] [[nodiscard]] inline std::optional<SharedScan> waitForNextScan(Duration timeout) {
             if (!isConnected.load(std::memory_order_acquire)) {
                 return std::nullopt;
             }
@@ -504,10 +509,26 @@ namespace Device {
          * - A flag at True if the next scan has been received, False if the DataLink is being destroyed.
          * - The scan received. If the flag is False, an empty scan is set to this field.
          */
-        [[maybe_unused]] [[nodiscard]] virtual inline std::optional<Device::Data::Scan> waitForNextScan() {
+        [[maybe_unused]] [[nodiscard]] virtual inline std::optional<SharedScan> waitForNextScan() {
             // Approximately 490293 years, should be sufficient as a long timeout ^^
             const auto aLongTimeout{std::chrono::hours{std::numeric_limits<uint32_t>::max()}};
             return waitForNextScan(aLongTimeout);
+        }
+
+        /**
+         * @param callback a callback to execute when the data link has been lost.
+         */
+        [[maybe_unused]] inline void addOnDataLinkConnectionLostCallback(OnDataLinkConnectionLost callback) {
+            std::unique_lock<LockType> guard{onDataLinkConnectionLostCallbackLock, std::adopt_lock};
+            onDataLinkConnectionLostCallbacks.push_back(std::move(callback));
+        }
+
+        /**
+         * @param callback a callback to execute when the data link has been lost.
+         */
+        [[maybe_unused]] inline void addOnNewScanAvailableCallback(OnNewScanAvailable callback) {
+            std::unique_lock<LockType> guard{onNewScanAvailableCallbackLock, std::adopt_lock};
+            onNewScanAvailableCallbacks.push_back(std::move(callback));
         }
 
         /**
@@ -525,25 +546,54 @@ namespace Device {
          * to acquire a mutex.
          * @param scan The new scan to set as output.
          */
-        inline void setOutputScanFromCompletedFactory(Data::Scan scan) {
+        inline void setOutputScanFromCompletedFactory(const SharedScan& scan) {
             {
-                RealtimeScan::ScopedAccess <farbot::ThreadType::realtime> scanGuard{*realtimeScan};
-                *scanGuard = std::move(scan);
+                std::atomic_store_explicit(&lastScanReceived, scan, std::memory_order_release);
+                //RealtimeScan::ScopedAccess <farbot::ThreadType::realtime> scanGuard{realtimeScan};
+                //*scanGuard = scan;
             }
-            std::unique_lock<LockType> guard{waitForScanLock, std::adopt_lock};
-            ++scanCounter;
-            scanAvailableCv.notify_all();
+            {
+                std::unique_lock<LockType> guard{waitForScanLock, std::adopt_lock};
+                ++scanCounter;
+                scanAvailableCv.notify_all();
+            }
+            fireOnScanAvailableEvent(scan);
+        }
+
+        /**
+         * Call all the connection lost callbacks currently registered.
+         */
+        inline void fireDataLinkConnectionLostEvent() {
+            std::unique_lock<LockType> guard{onDataLinkConnectionLostCallbackLock, std::adopt_lock};
+            for (auto &callback: onDataLinkConnectionLostCallbacks) {
+                std::invoke(callback);
+            }
+        }
+
+        /**
+         * Call all the scan available callbacks currently registered.
+         */
+        inline void fireOnScanAvailableEvent(const SharedScan& scan) {
+            std::unique_lock<LockType> guard{onNewScanAvailableCallbackLock, std::adopt_lock};
+            for (auto &callback: onNewScanAvailableCallbacks) {
+                std::invoke(callback, scan);
+            }
         }
 
     private:
         std::optional<std::future<void>> watchdogTaskFuture{std::nullopt};
         std::uint64_t scanCounter{0u};
-        Cv interruptCv{};
+        ConditionVariable interruptCv{};
         LockType interruptCvLock{};
+        LockType onDataLinkConnectionLostCallbackLock{};
+        LockType onNewScanAvailableCallbackLock{};
         std::atomic_bool interruptFlag{false};
+        std::vector<OnDataLinkConnectionLost> onDataLinkConnectionLostCallbacks{};
+        std::vector<OnNewScanAvailable> onNewScanAvailableCallbacks{};
     protected:
-        std::unique_ptr<RealtimeScan> realtimeScan{std::make_unique<RealtimeScan>(Data::Scan{})};
-        Cv scanAvailableCv{};
+        //mutable RealtimeScan realtimeScan{SharedScan{}};
+        SharedScan lastScanReceived{std::make_shared<Data::Scan>()};
+        ConditionVariable scanAvailableCv{};
         LockType waitForScanLock{};
         std::shared_ptr<R2000> device{nullptr};
         std::shared_ptr<DeviceHandle> deviceHandle{nullptr};

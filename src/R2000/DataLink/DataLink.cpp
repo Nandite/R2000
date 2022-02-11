@@ -71,19 +71,26 @@ bool Device::DataLink::isAlive() const noexcept {
 }
 
 void Device::DataLink::watchdogTask(std::chrono::seconds commandTimeout) {
-    const auto threadName{device->getName() + ".Watchdog"};
-    pthread_setname_np(pthread_self(), threadName.c_str());
+    const auto taskName{device->getName() + ".Watchdog"};
+    pthread_setname_np(pthread_self(), taskName.c_str());
     Device::Commands::FeedWatchdogCommand feedWatchdogCommand{*device};
     const auto watchdogTimeout{deviceHandle->getWatchdogTimeout()};
     for (; !interruptFlag.load(std::memory_order_acquire);) {
         auto future{feedWatchdogCommand.asyncExecute(*deviceHandle, commandTimeout)};
         if (!future) {
             isConnected.store(false, std::memory_order_release);
+        } else {
+            future->wait();
+            auto result{future->get()};
+            if (result == RequestResult::SUCCESS) {
+                isConnected.store(true, std::memory_order_release);
+            } else {
+                const auto wasConnected{isConnected.exchange(false, std::memory_order_release)};
+                if (wasConnected) {
+                    fireDataLinkConnectionLostEvent();
+                }
+            }
         }
-        future->wait();
-        auto result{future->get()};
-        const auto hasSucceed{result == RequestResult::SUCCESS};
-        isConnected.store(hasSucceed, std::memory_order_release);
         std::unique_lock<LockType> guard{interruptCvLock, std::adopt_lock};
         interruptCv.wait_for(guard, watchdogTimeout,
                              [&]() -> bool { return interruptFlag.load(std::memory_order_acquire); });

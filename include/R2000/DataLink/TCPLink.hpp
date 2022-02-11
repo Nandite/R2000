@@ -62,8 +62,9 @@ namespace Device {
              * @return Assembles and returns a scan from the stored packets. Subsequent call to this method will not
              * yield a scan as the internals buffers are cleared every time this function is called.
              */
-            inline Data::Scan operator*() override {
-                Data::Scan scan{distances, amplitudes, headers, std::chrono::steady_clock::now()};
+            inline SharedScan operator*() override {
+                auto scan{
+                        std::make_shared<Data::Scan>(distances, amplitudes, headers, std::chrono::steady_clock::now())};
                 clear();
                 return scan;
             }
@@ -271,7 +272,7 @@ namespace Device {
             std::vector<Data::Header> headers{};
             scanFactory.getHeaders(headers);
             auto byteSize{0u};
-            for (const auto &header : headers) {
+            for (const auto &header: headers) {
                 byteSize += header.packetSize;
             }
             return std::min(MAX_RECEPTION_BUFFER_SIZE, std::max(byteSize, DEFAULT_RECEPTION_BUFFER_SIZE));
@@ -284,7 +285,7 @@ namespace Device {
         internals::Types::Buffer extractionByteBuffer{};
         std::future<void> ioServiceTask{};
         TcpScanFactory scanFactory{};
-        Cv interruptSocketAsyncOpsCv{};
+        ConditionVariable interruptSocketAsyncOpsCv{};
         LockType interruptSocketAsyncOpsCvLock{};
         std::atomic_bool interruptSocketAsyncOpsFlag{false};
         boost::asio::ip::tcp::resolver resolver{ioService};

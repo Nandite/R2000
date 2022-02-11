@@ -22,23 +22,23 @@ public:
     explicit Worker(const unsigned int maxNumberOfJob = std::numeric_limits<unsigned int>::max())
             : maxJob(maxNumberOfJob) {
         workingTask = std::async(std::launch::async, [&] {
-                    for (; !interruptFlag.load(std::memory_order_acquire);) {
-                        decltype(jobs) localJobQueue{};
-                        {
-                            std::unique_lock<std::mutex> guard{jobLock, std::adopt_lock};
-                            jobQueueCondition.wait(guard, [&] {
-                                return !jobs.empty() || interruptFlag.load(std::memory_order_acquire);
-                            });
-                            if (interruptFlag.load(std::memory_order_acquire)) {
-                                return;
-                            }
-                            std::swap(jobs, localJobQueue);
-                        }
-                        for (auto &job : localJobQueue) {
-                            std::invoke(job);
-                        }
+            for (; !interruptFlag.load(std::memory_order_acquire);) {
+                decltype(jobs) localJobQueue{};
+                {
+                    std::unique_lock<std::mutex> guard{jobLock, std::adopt_lock};
+                    jobQueueCondition.wait(guard, [&] {
+                        return !jobs.empty() || interruptFlag.load(std::memory_order_acquire);
+                    });
+                    if (interruptFlag.load(std::memory_order_acquire)) {
+                        return;
                     }
-                });
+                    std::swap(jobs, localJobQueue);
+                }
+                for (auto &job : localJobQueue) {
+                    std::invoke(job);
+                }
+            }
+        });
     }
 
     /**
@@ -63,7 +63,9 @@ public:
      * @return True if the job has been queued for execution, False if the
      * maximum number of waiting job has been reached.
      */
-    template<typename Fn, typename... Args>
+    template<typename Fn, typename... Args,
+            typename = std::enable_if_t<std::is_invocable_v<Fn, Args...>>,
+            typename = std::enable_if_t<std::is_same_v<std::decay_t<std::invoke_result_t<Fn, Args...>>, void>>>
     inline bool pushJob(Fn &&fn, Args &&... args) noexcept {
         std::lock_guard<std::mutex> guard{jobLock, std::adopt_lock};
         if (jobs.size() <= maxJob) {

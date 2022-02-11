@@ -77,6 +77,7 @@ void Device::TCPLink::onBytesReceived(const boost::system::error_code &error, un
             std::clog << device->getName() << "::TCPLink::Cancelling operations on request." << std::endl;
         }
         isConnected.store(false, std::memory_order_release);
+        fireDataLinkConnectionLostEvent();
         return;
     }
     const auto begin{std::cbegin(receptionByteBuffer)};

@@ -237,7 +237,6 @@ Device::R2000::onSocketConnectionAttemptCompleted(const boost::system::error_cod
         std::invoke(callable, result);
     } else {
         if (error == boost::asio::error::operation_aborted) {
-            // std::clog << configuration.name << "::Socket connection timout" << std::endl;
             std::invoke(callable, DeviceAnswer{RequestResult::TIMEOUT});
         } else {
             std::clog << configuration.name << "::Network error while connecting to the device ("
