@@ -7,7 +7,6 @@
 #pragma once
 
 #include "Data.hpp"
-#include "Farbot.hpp"
 #include "R2000/R2000.hpp"
 #include "R2000/Control/Parameters.hpp"
 #include <atomic>

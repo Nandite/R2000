@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Control/Commands.hpp"
-#include "Farbot.hpp"
 #include "R2000.hpp"
 #include <any>
 #include <bitset>
