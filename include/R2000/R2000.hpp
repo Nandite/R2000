@@ -303,7 +303,8 @@ namespace Device {
          * Get a resolver query from the device configuration that is used to connect to the socket.
          * @return a resolver query.
          */
-        [[nodiscard]] boost::asio::ip::tcp::resolver::query getDeviceQuery() const;
+        [[nodiscard]] static boost::asio::ip::tcp::resolver::query
+        getDeviceQuery(const DeviceConfiguration &configuration);
 
         /**
          * Send a HTTP GET request to the device. This methods blocks until the socket is connected.

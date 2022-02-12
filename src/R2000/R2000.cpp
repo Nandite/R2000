@@ -44,7 +44,7 @@ noexcept(false) {
     if (!parameters.empty()) {
         request += "?";
     }
-    for (const auto &parameter : parameters) {
+    for (const auto &parameter: parameters) {
         request += parameter.first + "=" + parameter.second + "&";
     }
     if (request.back() == '&') {
@@ -134,7 +134,7 @@ Device::DeviceAnswer Device::R2000::HttpGet(boost::asio::ip::tcp::socket &socket
         throw std::system_error{error};
     }
 
-    for (auto &character : content) {
+    for (auto &character: content) {
         if (character == '\r') {
             character = ' ';
         }
@@ -155,7 +155,7 @@ Device::DeviceAnswer Device::R2000::HttpGet(boost::asio::ip::tcp::socket &socket
 
 Device::DeviceAnswer Device::R2000::HttpGet(const std::string &requestPath) const noexcept(false) {
     boost::asio::ip::tcp::resolver resolver{ioService};
-    const auto query{getDeviceQuery()};
+    const auto query{getDeviceQuery(configuration)};
     auto endpointIterator{resolver.resolve(query)};
     boost::asio::ip::tcp::resolver::iterator endpointEndIterator{};
     internals::SocketGuard<boost::asio::ip::tcp::socket> socketGuard{ioService};
@@ -183,7 +183,7 @@ bool Device::R2000::AsyncHttpGet(const std::string &request, CommandCallback cal
             onEndpointResolutionAttemptCompleted(boost::system::error_code{}, request, fn,
                                                  *deviceEndpoints, timeout);
         } else {
-            const auto query{getDeviceQuery()};
+            const auto query{getDeviceQuery(configuration)};
             auto resolverHandler{[&, request, fn, timeout](const auto &error, auto queriedEndpoints) {
                 deviceEndpoints = std::move(queriedEndpoints);
                 onEndpointResolutionAttemptCompleted(error, request, fn, *deviceEndpoints, timeout);
@@ -303,14 +303,14 @@ std::string Device::R2000::makeRequestFromParameters(const std::string &command,
     auto request{"/cmd/" + command};
     if (!parameters.empty())
         request += "?";
-    for (const auto &parameter : parameters)
+    for (const auto &parameter: parameters)
         request += parameter.first + "=" + parameter.second + "&";
     if (request.back() == '&')
         request.pop_back();
     return request;
 }
 
-boost::asio::ip::tcp::resolver::query Device::R2000::getDeviceQuery() const {
+boost::asio::ip::tcp::resolver::query Device::R2000::getDeviceQuery(const DeviceConfiguration &configuration) {
     const auto deviceAddress{configuration.deviceAddress.to_string()};
     const auto port{std::to_string(configuration.httpServicePort)};
     boost::asio::ip::tcp::resolver::query query{deviceAddress, port};
