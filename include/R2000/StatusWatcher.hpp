@@ -285,10 +285,10 @@ namespace Device {
     class StatusWatcher {
         using LockType = std::mutex;
         using Cv = std::condition_variable;
-        using RealtimeStatus = farbot::RealtimeObject<DeviceStatus, farbot::RealtimeObjectOptions::realtimeMutatable>;
-        using OnStatusAvailableCallback = std::function<void(const DeviceStatus &)>;
-        using OnDeviceConnected = std::function<void(void)>;
-        using OnDeviceDisconnected = std::function<void(void)>;
+        using SharedStatus = std::shared_ptr<DeviceStatus>;
+        using OnStatusAvailableCallback = std::function<void(SharedStatus)>;
+        using OnDeviceConnected = std::function<void()>;
+        using OnDeviceDisconnected = std::function<void()>;
 
     public:
         /**
@@ -300,7 +300,9 @@ namespace Device {
         /**
          * @return True if the connection to the device is alive, False otherwise.
          */
-        [[maybe_unused]] [[nodiscard]] inline bool isAlive() const { return isConnected.load(std::memory_order_acquire); }
+        [[maybe_unused]] [[nodiscard]] inline bool isAlive() const {
+            return isConnected.load(std::memory_order_acquire);
+        }
 
         /**
          * @param callback a callback to execute when a new update status is available.
@@ -330,9 +332,8 @@ namespace Device {
          * Get the last status received from the device. This method is non-blocking, wait and lock free.
          * @return  the last status received.
          */
-        [[maybe_unused]] [[nodiscard]] virtual inline DeviceStatus getLastReceivedStatus() const {
-            RealtimeStatus::ScopedAccess <farbot::ThreadType::nonRealtime> statusGuard{*realtimeStatus};
-            return *statusGuard;
+        [[maybe_unused]] [[nodiscard]] virtual inline SharedStatus getLastReceivedStatus() const {
+            return std::atomic_load_explicit(&lastStatusReceived, std::memory_order_acquire);
         };
 
         /**
@@ -351,13 +352,10 @@ namespace Device {
          * the new status event.
          * @param status The new status obtained from the device.
          */
-        inline void setStatusToOutputAndFireNewStatusEvent(const DeviceStatus &status) {
-            {
-                RealtimeStatus::ScopedAccess <farbot::ThreadType::realtime> scanGuard{*realtimeStatus};
-                *scanGuard = status;
-            }
+        inline void setStatusToOutputAndFireNewStatusEvent(const SharedStatus &status) {
+            std::atomic_store_explicit(&lastStatusReceived, status, std::memory_order_release);
             std::unique_lock<LockType> guard{statusCallbackLock, std::adopt_lock};
-            for (auto &callback : onStatusAvailableCallbacks) {
+            for (auto &callback: onStatusAvailableCallbacks) {
                 std::invoke(callback, status);
             }
         }
@@ -367,7 +365,7 @@ namespace Device {
          */
         inline void fireDeviceConnectionEvent() {
             std::unique_lock<LockType> guard{deviceConnectedCallbackLock, std::adopt_lock};
-            for (auto &callback : onDeviceConnectedCallbacks) {
+            for (auto &callback: onDeviceConnectedCallbacks) {
                 std::invoke(callback);
             }
         }
@@ -377,14 +375,14 @@ namespace Device {
          */
         inline void fireDeviceDisconnectionEvent() {
             std::unique_lock<LockType> guard{deviceDisconnectedCallbackLock, std::adopt_lock};
-            for (auto &callback : onDeviceDisconnectedCallbacks) {
+            for (auto &callback: onDeviceDisconnectedCallbacks) {
                 std::invoke(callback);
             }
         }
 
     private:
         std::shared_ptr<R2000> device{nullptr};
-        std::unique_ptr<RealtimeStatus> realtimeStatus{std::make_unique<RealtimeStatus>(DeviceStatus{})};
+        SharedStatus lastStatusReceived{std::make_shared<DeviceStatus>()};
         std::future<void> statusWatcherTaskFuture{};
         Cv interruptCv{};
         LockType interruptCvLock{};

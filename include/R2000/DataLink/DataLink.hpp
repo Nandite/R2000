@@ -370,7 +370,6 @@ namespace Device {
     protected:
         using LockType = std::mutex;
         using ConditionVariable = std::condition_variable;
-        //using RealtimeScan = farbot::RealtimeObject<SharedScan, farbot::RealtimeObjectOptions::realtimeMutatable>;
         static constexpr unsigned int MAX_RESERVE_POINTS_BUFFER{1024u};
     protected:
 
@@ -413,9 +412,9 @@ namespace Device {
             static constexpr auto C{Data::underlyingType(Parameters::PACKET_TYPE::C)};
 
             auto result{internals::retrievePacketHeader(begin, end)};
-            if (!result)
+            if (!result) {
                 return {false, end, 0};
-
+            }
             const auto &header{result->second};
             const auto headerSize{header.headerSize};
             const auto payloadStart{std::next(result->first, headerSize)};
@@ -472,14 +471,12 @@ namespace Device {
          * @return The last scan received by this DataLink. This method is wait-free and lock-free.
          */
         [[maybe_unused]] [[nodiscard]] virtual inline SharedScan getLastScan() const {
-            //RealtimeScan::ScopedAccess <farbot::ThreadType::nonRealtime> scanGuard{realtimeScan};
-            //return *scanGuard;
             return std::atomic_load_explicit(&lastScanReceived, std::memory_order_acquire);
         };
 
         /**
          * Wait for the next scan to be received by this DataLink.
-         * @tparam Duration The duration of type std::chrono::duration.
+         * @tparam Duration The type of the duration. Must be of type std::chrono::duration.
          * @param timeout Maximum length of time to wait for the next scan.
          * @return A pair containing :
          * - A flag at True if the next scan has been received, False if a timeout has occurred or the
@@ -546,12 +543,8 @@ namespace Device {
          * to acquire a mutex.
          * @param scan The new scan to set as output.
          */
-        inline void setOutputScanFromCompletedFactory(const SharedScan& scan) {
-            {
-                std::atomic_store_explicit(&lastScanReceived, scan, std::memory_order_release);
-                //RealtimeScan::ScopedAccess <farbot::ThreadType::realtime> scanGuard{realtimeScan};
-                //*scanGuard = scan;
-            }
+        inline void setOutputScanFromCompletedFactory(const SharedScan &scan) {
+            std::atomic_store_explicit(&lastScanReceived, scan, std::memory_order_release);
             {
                 std::unique_lock<LockType> guard{waitForScanLock, std::adopt_lock};
                 ++scanCounter;
@@ -573,7 +566,7 @@ namespace Device {
         /**
          * Call all the scan available callbacks currently registered.
          */
-        inline void fireOnScanAvailableEvent(const SharedScan& scan) {
+        inline void fireOnScanAvailableEvent(const SharedScan &scan) {
             std::unique_lock<LockType> guard{onNewScanAvailableCallbackLock, std::adopt_lock};
             for (auto &callback: onNewScanAvailableCallbacks) {
                 std::invoke(callback, scan);
@@ -591,7 +584,6 @@ namespace Device {
         std::vector<OnDataLinkConnectionLost> onDataLinkConnectionLostCallbacks{};
         std::vector<OnNewScanAvailable> onNewScanAvailableCallbacks{};
     protected:
-        //mutable RealtimeScan realtimeScan{SharedScan{}};
         SharedScan lastScanReceived{std::make_shared<Data::Scan>()};
         ConditionVariable scanAvailableCv{};
         LockType waitForScanLock{};

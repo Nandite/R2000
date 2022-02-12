@@ -28,7 +28,7 @@ void Device::StatusWatcher::statusWatcherTask() {
             const auto result{future->get()};
             const auto requestResult{result.first};
             if (requestResult == RequestResult::SUCCESS) {
-                setStatusToOutputAndFireNewStatusEvent(DeviceStatus{result.second});
+                setStatusToOutputAndFireNewStatusEvent(std::make_shared<DeviceStatus>(result.second));
                 const auto wasConnected{isConnected.exchange(true, std::memory_order_release)};
                 if (!wasConnected) {
                     fireDeviceConnectionEvent();

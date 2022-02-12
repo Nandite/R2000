@@ -127,22 +127,20 @@ int main(int argc, char **argv) {
     const auto period{1s};
     std::unique_ptr<Device::StatusWatcher> statusWatcher{nullptr};
     if (outputPath.empty()) {
-        auto onStatusReceived{[&device, deviceVersion](const auto &status) -> void {
-            const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
-            std::cout << statusAsString << std::endl;
-        }};
         statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
-        statusWatcher->addOnStatusAvailableCallback(onStatusReceived);
+        statusWatcher->addOnStatusAvailableCallback([&device, deviceVersion](auto status) {
+            const auto statusAsString{formatDeviceStatus(*device, *status, deviceVersion)};
+            std::cout << statusAsString << std::endl;
+        });
     } else {
-        auto onStatusReceived{[&device, &outputPath, deviceVersion](const auto &status) -> void {
-            const auto statusAsString{formatDeviceStatus(*device, status, deviceVersion)};
+        statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
+        statusWatcher->addOnStatusAvailableCallback([&device, &outputPath, deviceVersion](auto status) {
+            const auto statusAsString{formatDeviceStatus(*device, *status, deviceVersion)};
             std::ofstream stream(outputPath, std::ios::trunc);
             if (!stream.is_open())
                 return;
             stream << statusAsString << std::endl;
-        }};
-        statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
-        statusWatcher->addOnStatusAvailableCallback(onStatusReceived);
+        });
     }
     while (!interruptProgram) {
         std::this_thread::sleep_for(1s);
