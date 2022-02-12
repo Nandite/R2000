@@ -275,6 +275,11 @@ namespace Device {
                                   std::chrono::milliseconds timeout = 5000ms) noexcept(true);
 
         /**
+         * Cancel the pending command being run by the device.
+         */
+        void cancelPendingCommands() noexcept;
+
+        /**
          * @return The device hostname.
          */
         [[nodiscard]] inline auto getHostname() const { return configuration.deviceAddress; }

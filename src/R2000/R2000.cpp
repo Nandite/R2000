@@ -72,6 +72,26 @@ bool Device::R2000::asyncSendHttpCommand(const std::string &command, const Param
     return AsyncHttpGet(request, std::move(callable), timeout);
 }
 
+void Device::R2000::cancelPendingCommands() noexcept {
+    asyncResolver.cancel();
+    {
+        boost::system::error_code error{};
+        asyncSocket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
+        if (error) {
+            std::clog << configuration.name << "::Cancel pending commands::An error has occurred on socket shutdown ("
+                      << error.message() << ")" << std::endl;
+        }
+    }
+    {
+        boost::system::error_code error{};
+        asyncSocket.close(error);
+        if (error) {
+            std::clog << configuration.name << "::Cancel pending commands::An error has occurred on socket closure ("
+                      << error.message() << ")" << std::endl;
+        }
+    }
+}
+
 Device::DeviceAnswer Device::R2000::HttpGet(boost::asio::ip::tcp::socket &socket, const std::string &requestPath) {
     std::string header{};
     std::string content{};
@@ -180,8 +200,7 @@ bool Device::R2000::AsyncHttpGet(const std::string &request, CommandCallback cal
                                  std::chrono::milliseconds timeout) noexcept(true) {
     auto asyncWorkerJob{[&, request, timeout, fn = std::move(callable)]() {
         if (deviceEndpoints) {
-            onEndpointResolutionAttemptCompleted(boost::system::error_code{}, request, fn,
-                                                 *deviceEndpoints, timeout);
+            onEndpointResolutionAttemptCompleted({}, request, fn, *deviceEndpoints, timeout);
         } else {
             const auto query{getDeviceQuery(configuration)};
             auto resolverHandler{[&, request, fn, timeout](const auto &error, auto queriedEndpoints) {
@@ -286,9 +305,7 @@ Device::R2000::~R2000() {
     boost::system::error_code placeholder{};
     resolverDeadline.cancel(placeholder);
     socketDeadline.cancel(placeholder);
-    asyncResolver.cancel();
-    asyncSocket.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, placeholder);
-    asyncSocket.close(placeholder);
+    cancelPendingCommands();
     {
         std::unique_lock<std::mutex> guard{ioServiceLock, std::adopt_lock};
         interruptIoServiceTask.store(true, std::memory_order_release);
@@ -325,3 +342,4 @@ void Device::R2000::ioServiceTask() {
         ioService.reset();
     }
 }
+
