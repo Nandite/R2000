@@ -155,8 +155,8 @@ namespace Device::Commands {
                 if (deviceAnswer) {
                     return {deviceAnswer.getRequestResult(), {}, {}};
                 }
-                const auto info{extractInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
-                return {deviceAnswer.getRequestResult(), info.first, info.second};
+                const auto &[info, commands]{extractInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
+                return {deviceAnswer.getRequestResult(), info, commands};
             }
 
             /**
@@ -173,8 +173,8 @@ namespace Device::Commands {
                         promise->set_value({result.getRequestResult(), {}, {}});
                         return;
                     }
-                    const auto info{extractInfoFromPropertyTree(result.getPropertyTree())};
-                    promise->set_value({result.getRequestResult(), info.first, info.second});
+                    const auto &[info, commands]{extractInfoFromPropertyTree(result.getPropertyTree())};
+                    promise->set_value({result.getRequestResult(), info, commands});
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_GET_PROTOCOL_INFO, onComplete, timeout)) {
                     return {promise->get_future()};
@@ -197,8 +197,8 @@ namespace Device::Commands {
                                 std::invoke(fn, ResultType{result.getRequestResult(), {}, {}});
                                 return;
                             }
-                            const auto info{extractInfoFromPropertyTree(result.getPropertyTree())};
-                            std::invoke(fn, ResultType{result.getRequestResult(), info.first, info.second});
+                            const auto &[info, commands]{extractInfoFromPropertyTree(result.getPropertyTree())};
+                            std::invoke(fn, ResultType{result.getRequestResult(), info, commands});
                         },
                         timeout);
             }
@@ -225,7 +225,7 @@ namespace Device::Commands {
                 if (!commands || !protocolName || !protocolVersionMajor || !protocolVersionMinor)
                     return {{},
                             {}};
-                for (const auto &name : *commands) {
+                for (const auto &name: *commands) {
                     const auto parameterName{name.second.get<std::string>("")};
                     if (parameterName.empty())
                         continue;
@@ -258,11 +258,9 @@ namespace Device::Commands {
              */
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
                 CommandExecutorImpl<GetProtocolInfo> getProtocolInfo{device};
-                auto result{getProtocolInfo.execute()};
-                auto requestResult{std::get<0>(result)};
+                const auto &[requestResult, parameters, ignore]{getProtocolInfo.execute()};
                 if (requestResult == RequestResult::SUCCESS)
                     return {requestResult, Parameters::PFSDP::UNKNOWN};
-                const auto parameters{std::get<1>(result)};
                 const auto major{parameters.at(PARAMETER_PROTOCOL_VERSION_MAJOR)};
                 const auto minor{parameters.at(PARAMETER_PROTOCOL_VERSION_MINOR)};
                 return {requestResult, protocolVersionFromString(major, minor)};
@@ -283,15 +281,13 @@ namespace Device::Commands {
                         return {Device::RequestResult::FAILED, Parameters::PFSDP::UNKNOWN};
                     }
                     future->wait();
-                    auto result{future->get()};
-                    const auto resultRequest{std::get<0>(result)};
-                    if (resultRequest != Device::RequestResult::SUCCESS) {
-                        return {resultRequest, Parameters::PFSDP::UNKNOWN};
+                    const auto &[requestResult, parameters, ignore]{future->get()};
+                    if (requestResult != Device::RequestResult::SUCCESS) {
+                        return {requestResult, Parameters::PFSDP::UNKNOWN};
                     }
-                    const auto parameters{std::get<1>(result)};
                     const auto major{parameters.at(PARAMETER_PROTOCOL_VERSION_MAJOR)};
                     const auto minor{parameters.at(PARAMETER_PROTOCOL_VERSION_MINOR)};
-                    return {resultRequest, protocolVersionFromString(major, minor)};
+                    return {requestResult, protocolVersionFromString(major, minor)};
                 });
             }
 
@@ -306,15 +302,14 @@ namespace Device::Commands {
                 CommandExecutorImpl<GetProtocolInfo> getProtocolInfo{device};
                 return getProtocolInfo.asyncExecute(timeout, [fn = std::move(callable)](
                         const CommandExecutorImpl<GetProtocolInfo>::AsyncResultType &result) -> void {
-                    const auto resultRequest{std::get<0>(result)};
-                    if (resultRequest != Device::RequestResult::SUCCESS) {
-                        std::invoke(fn, AsyncResultType{resultRequest, Parameters::PFSDP::UNKNOWN});
+                    const auto &[requestResult, parameters, ignore] = result;
+                    if (requestResult != Device::RequestResult::SUCCESS) {
+                        std::invoke(fn, AsyncResultType{requestResult, Parameters::PFSDP::UNKNOWN});
                         return;
                     }
-                    const auto parameters{std::get<1>(result)};
                     const auto major{parameters.at(PARAMETER_PROTOCOL_VERSION_MAJOR)};
                     const auto minor{parameters.at(PARAMETER_PROTOCOL_VERSION_MINOR)};
-                    std::invoke(fn, AsyncResultType{resultRequest, protocolVersionFromString(major, minor)});
+                    std::invoke(fn, AsyncResultType{requestResult, protocolVersionFromString(major, minor)});
                 });
             }
 
@@ -703,10 +698,9 @@ namespace Device::Commands {
                               "All the provided handle must be of type ReadOnlyRequestBuilder");
                 Parameters::ParametersList parameters{};
                 ParametersChaining::template list(parameters, std::forward<Args>(args)...);
-                const auto parametersListAsString{chainAndConvertParametersToString(std::forward<Args>(args)...)};
+                const auto &[chain, ignore]{chainAndConvertParametersToString(std::forward<Args>(args)...)};
                 const auto deviceAnswer{
-                        device.sendHttpCommand(COMMAND_GET_PARAMETER, PARAMETER_NAME_LIST,
-                                               parametersListAsString.first)};
+                        device.sendHttpCommand(COMMAND_GET_PARAMETER, PARAMETER_NAME_LIST, chain)};
                 if (deviceAnswer) {
                     return {deviceAnswer.getRequestResult(), {}};
                 }
@@ -728,10 +722,10 @@ namespace Device::Commands {
                 static_assert(
                         std::conjunction_v<std::is_base_of<Parameters::ReadOnlyRequestBuilder, typename std::decay_t<Args>>...>,
                         "All the provided handle must be of type ReadOnlyRequestBuilder");
-                const auto chainedParameters{chainAndConvertParametersToString(std::forward<Args>(args)...)};
+                const auto &[chain, parameters]{chainAndConvertParametersToString(std::forward<Args>(args)...)};
                 auto promise{std::make_shared<std::promise<AsyncResultType>>()};
                 auto onComplete{
-                        [promise, parameters = std::move(chainedParameters.second)](
+                        [promise, parameters = std::move(parameters)](
                                 const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 promise->set_value({result.getRequestResult(), {}});
@@ -741,7 +735,7 @@ namespace Device::Commands {
                                     extractParametersValues(parameters, result.getPropertyTree())};
                             promise->set_value({result.getRequestResult(), {receivedParameters}});
                         }};
-                if (device.asyncSendHttpCommand(COMMAND_GET_PARAMETER, {{PARAMETER_NAME_LIST, chainedParameters.first}},
+                if (device.asyncSendHttpCommand(COMMAND_GET_PARAMETER, {{PARAMETER_NAME_LIST, chain}},
                                                 onComplete, timeout)) {
                     return {promise->get_future()};
                 }
@@ -762,10 +756,10 @@ namespace Device::Commands {
                 static_assert(
                         std::conjunction_v<std::is_base_of<Parameters::ReadOnlyRequestBuilder, typename std::decay_t<Args>>...>,
                         "All the provided handle must be of type ReadOnlyRequestBuilder");
-                const auto chainedParameters{chainAndConvertParametersToString(std::forward<Args>(args)...)};
+                const auto &[chain, parameters]{chainAndConvertParametersToString(std::forward<Args>(args)...)};
                 return device.asyncSendHttpCommand(
-                        COMMAND_GET_PARAMETER, {{PARAMETER_NAME_LIST, chainedParameters}}, [fn = std::move(callable),
-                                parameters = std::move(chainedParameters.second)](
+                        COMMAND_GET_PARAMETER, {{PARAMETER_NAME_LIST, chain}}, [fn = std::move(callable),
+                                parameters = std::move(parameters)](
                                 const Device::DeviceAnswer &result) -> void {
                             if (!result) {
                                 std::invoke(fn, AsyncResultType{result.getRequestResult(), {}});
@@ -788,7 +782,7 @@ namespace Device::Commands {
             static Parameters::ParametersMap
             extractParametersValues(const Parameters::ParametersList &list, const PropertyTree &propertyTree) {
                 Parameters::ParametersMap keysValues{};
-                for (const auto &name : list) {
+                for (const auto &name: list) {
                     auto value{propertyTree.get_optional<std::string>(name)};
                     if (!value) {
                         keysValues.insert(std::make_pair(name, ""));
@@ -814,7 +808,7 @@ namespace Device::Commands {
                 Parameters::ParametersList parameters{};
                 ParametersChaining::template list(parameters, std::forward<Args>(args)...);
                 std::string parametersAsString{};
-                for (const auto &names : parameters)
+                for (const auto &names: parameters)
                     parametersAsString += (names + ";");
                 parametersAsString.pop_back();
                 return {parametersAsString, parameters};
@@ -990,7 +984,7 @@ namespace Device::Commands {
                 const auto list{propertyTree.get_child_optional("parameters")};
                 if (!list)
                     return parameterList;
-                for (const auto &name : *list) {
+                for (const auto &name: *list) {
                     const auto parameterName{name.second.get<std::string>("")};
                     if (parameterName.empty())
                         continue;
@@ -1095,7 +1089,7 @@ namespace Device::Commands {
                 Parameters::ParametersList parameters{};
                 ParametersChaining::template list(parameters, std::forward<Args>(args)...);
                 std::string parametersList{};
-                for (const auto &names : parameters) {
+                for (const auto &names: parameters) {
                     parametersList += (names + ";");
                 }
                 parametersList.pop_back();
@@ -1248,8 +1242,8 @@ namespace Device::Commands {
                 if (deviceAnswer) {
                     return {deviceAnswer.getRequestResult(), {}, {}};
                 }
-                const auto handle{extractHandleInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
-                return {deviceAnswer.getRequestResult(), handle.first, handle.second};
+                const auto[port, handle]{extractHandleInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
+                return {deviceAnswer.getRequestResult(), port, handle};
             }
 
             /**
@@ -1268,8 +1262,8 @@ namespace Device::Commands {
                         promise->set_value({result.getRequestResult(), {}, {}});
                         return;
                     }
-                    const auto handle{extractHandleInfoFromPropertyTree(result.getPropertyTree())};
-                    promise->set_value({result.getRequestResult(), handle.first, handle.second});
+                    const auto[port, handle]{extractHandleInfoFromPropertyTree(result.getPropertyTree())};
+                    promise->set_value({result.getRequestResult(), port, handle});
                 }};
                 if (device.asyncSendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters, onComplete, timeout)) {
                     return {promise->get_future()};
@@ -1297,10 +1291,10 @@ namespace Device::Commands {
                                                                                        {}});
                                                            return;
                                                        }
-                                                       const auto handle{extractHandleInfoFromPropertyTree(
+                                                       const auto[port, handle]{extractHandleInfoFromPropertyTree(
                                                                result.getPropertyTree())};
-                                                       std::invoke(fn, AsyncResultType{result.getRequestResult(),
-                                                                                       handle.first, handle.second});
+                                                       std::invoke(fn, AsyncResultType{result.getRequestResult(), port,
+                                                                                       handle});
                                                    },
                                                    timeout);
             }
@@ -1510,7 +1504,7 @@ namespace Device::Commands {
             static Parameters::ParametersMap
             getScanOutputConfig(const Device::PropertyTree &propertyTree) {
                 Parameters::ParametersMap scanOutputConfig{};
-                for (const auto &name : propertyTree) {
+                for (const auto &name: propertyTree) {
                     const auto parameterName{name.second.get<std::string>("")};
                     auto value{propertyTree.get_optional<std::string>(parameterName)};
                     if (!value) {

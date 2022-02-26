@@ -89,27 +89,24 @@ Device::DataLinkBuilder::constructDataLink(const std::shared_ptr<Device::R2000> 
     const auto protocol{internals::castAnyOrThrow<Device::PROTOCOL>(requirements.get("protocol"), "")};
     switch (protocol) {
         case PROTOCOL::TCP: {
-            const auto params{extractTcpDataLinkParameters(requirements)};
+            const auto &[builder, watchdog]{extractTcpDataLinkParameters(requirements)};
             auto command{Device::Commands::RequestTcpHandleCommand{*device}};
-            const auto result{command.execute(params.first)};
+            const auto result{command.execute(builder)};
             const auto resultRequest{std::get<0>(result)};
             if (resultRequest != Device::RequestResult::SUCCESS)
                 return {nullptr};
-            return std::make_shared<TCPLink>(device,
-                                             makeTcpDeviceHandle(result, device->getHostname(), params.second));
+            const auto handle{makeTcpDeviceHandle(result, device->getHostname(), watchdog)};
+            return std::make_shared<TCPLink>(device, handle);
         }
         case PROTOCOL::UDP: {
-            const auto params{extractUdpDataLinkParameters(requirements)};
-            const auto &builder{std::get<0>(params)};
-            const auto &watchdog{std::get<1>(params)};
-            const auto &address{std::get<2>(params)};
-            const auto &port{std::get<3>(params)};
+            const auto &[builder, watchdog, address, port]{extractUdpDataLinkParameters(requirements)};
             auto command{Device::Commands::RequestUdpHandleCommand{*device}};
             const auto result{command.execute(builder)};
             const auto resultRequest{std::get<0>(result)};
             if (resultRequest != Device::RequestResult::SUCCESS)
                 return {nullptr};
-            return std::make_shared<UDPLink>(device, makeUdpDeviceHandle(result, address, port, watchdog));
+            const auto handle{makeUdpDeviceHandle(result, address, port, watchdog)};
+            return std::make_shared<UDPLink>(device, handle);
         }
     }
     return {nullptr};
@@ -122,42 +119,37 @@ Device::DataLinkBuilder::constructDataLink(const std::shared_ptr<Device::R2000> 
     const auto protocol{internals::castAnyOrThrow<Device::PROTOCOL>(requirements.get("protocol"), "")};
     switch (protocol) {
         case PROTOCOL::TCP: {
-            const auto params{extractTcpDataLinkParameters(requirements)};
+            const auto &[handle, watchdog]{extractTcpDataLinkParameters(requirements)};
             const auto launched{Device::Commands::RequestTcpHandleCommand{*device}.asyncExecute(
-                    params.first, timeout,
-                    [promise, params, &device](const auto &result) -> void {
+                    handle, timeout,
+                    [promise, w = watchdog, &device](const auto &result) -> void {
                         const auto resultRequest{std::get<0>(result)};
                         if (resultRequest != RequestResult::SUCCESS) {
                             promise->set_value(AsyncBuildResult{resultRequest, nullptr});
                             return;
                         }
+                        const auto handleValue{makeTcpDeviceHandle(result, device->getHostname(), w)};
                         promise->set_value(AsyncBuildResult{
-                                RequestResult::SUCCESS, std::make_shared<TCPLink>(
-                                        device,
-                                        makeTcpDeviceHandle(result, device->getHostname(), params.second))});
+                                RequestResult::SUCCESS, std::make_shared<TCPLink>(device, handleValue)});
                     })};
             if (!launched)
                 promise->set_value(AsyncBuildResult{RequestResult::FAILED, nullptr});
             break;
         }
         case PROTOCOL::UDP: {
-            const auto params{extractUdpDataLinkParameters(requirements)};
-            const auto &builder{std::get<0>(params)};
+            const auto &[builder, watchdog, address, port]{extractUdpDataLinkParameters(requirements)};
             const auto launched{Device::Commands::RequestUdpHandleCommand{*device}.asyncExecute(
                     builder, timeout,
-                    [promise, params, &device](const auto &result) -> void{
+                    [promise,  a = address, w = watchdog, p = port, &device](const auto &result) -> void {
                         const auto resultRequest{std::get<0>(result)};
                         if (resultRequest != RequestResult::SUCCESS) {
                             promise->set_value(AsyncBuildResult{resultRequest, nullptr});
                             return;
                         }
-                        const auto &watchdog{std::get<1>(params)};
-                        const auto &address{std::get<2>(params)};
-                        const auto &port{std::get<3>(params)};
+                        const auto handleValue{makeUdpDeviceHandle(result, a, p, w)};
                         promise->set_value(AsyncBuildResult{
                                 RequestResult::SUCCESS,
-                                std::make_shared<UDPLink>(device, makeUdpDeviceHandle(result, address, port,
-                                                                                      watchdog))});
+                                std::make_shared<UDPLink>(device, handleValue)});
                     })};
             if (!launched)
                 promise->set_value(AsyncBuildResult{RequestResult::FAILED, nullptr});
