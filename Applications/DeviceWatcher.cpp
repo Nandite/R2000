@@ -129,17 +129,15 @@ int main(int argc, char **argv) {
     if (outputPath.empty()) {
         statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
         statusWatcher->addOnStatusAvailableCallback([&device, deviceVersion](auto status) {
-            const auto statusAsString{formatDeviceStatus(*device, *status, deviceVersion)};
-            std::cout << statusAsString << std::endl;
+            std::cout << formatDeviceStatus(*device, *status, deviceVersion) << std::endl;
         });
     } else {
         statusWatcher = std::make_unique<Device::StatusWatcher>(device, period);
         statusWatcher->addOnStatusAvailableCallback([&device, &outputPath, deviceVersion](auto status) {
-            const auto statusAsString{formatDeviceStatus(*device, *status, deviceVersion)};
             std::ofstream stream(outputPath, std::ios::trunc);
             if (!stream.is_open())
                 return;
-            stream << statusAsString << std::endl;
+            stream << formatDeviceStatus(*device, *status, deviceVersion) << std::endl;
         });
     }
     while (!interruptProgram) {
