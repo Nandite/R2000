@@ -6,9 +6,6 @@ set(CMAKE_SYSTEM_NAME Linux)
 add_compile_options(-Wall -Wextra)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# added -fopenmp
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize-recover=address -g -O0")
 
 set(DEBUG_FLAGS "-g -ggdb -O0 -pthread -pedantic")
 set(RELEASE_FLAGS "-O3 -pthread -pedantic")
@@ -19,7 +16,7 @@ include_directories(include)
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.58.0 COMPONENTS program_options filesystem REQUIRED)
+find_package(Boost 1.68.0 COMPONENTS program_options filesystem REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 link_directories(${Boost_LIBRARY_DIR})
 ############################################################################
