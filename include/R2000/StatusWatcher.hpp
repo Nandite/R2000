@@ -312,10 +312,14 @@ namespace Device {
         }
 
         /**
-         * @param callback a callback to execute when the device has connected.
+         * @param callback a callback to execute when the device has connected. If the device is already connected,
+         * the callback will be immediately executed.
          */
         [[maybe_unused]] inline void addOnDeviceConnectedCallback(OnDeviceConnected callback) {
-            std::unique_lock<LockType> guard{deviceConnectedCallbackLock, std::adopt_lock};
+            if (isConnected.load(std::memory_order_acquire)) {
+                std::invoke(callback);
+            }
+            std::lock_guard<LockType> guard{deviceConnectedCallbackLock};
             onDeviceConnectedCallbacks.push_back(std::move(callback));
         }
 
@@ -323,7 +327,7 @@ namespace Device {
          * @param callback a callback to execute when the device has disconnected.
          */
         [[maybe_unused]] inline void addOnDeviceDisconnectedCallback(OnDeviceDisconnected callback) {
-            std::unique_lock<LockType> guard{deviceDisconnectedCallbackLock, std::adopt_lock};
+            std::lock_guard<LockType> guard{deviceDisconnectedCallbackLock};
             onDeviceDisconnectedCallbacks.push_back(std::move(callback));
         }
 
@@ -353,7 +357,7 @@ namespace Device {
          */
         inline void setStatusToOutputAndFireNewStatusEvent(const SharedStatus &status) {
             std::atomic_store_explicit(&lastStatusReceived, status, std::memory_order_release);
-            std::unique_lock<LockType> guard{statusCallbackLock, std::adopt_lock};
+            std::lock_guard<LockType> guard{statusCallbackLock};
             for (auto &callback: onStatusAvailableCallbacks) {
                 std::invoke(callback, status);
             }
@@ -363,7 +367,6 @@ namespace Device {
          * Call all the connection callbacks currently registered.
          */
         inline void fireDeviceConnectionEvent() {
-            std::unique_lock<LockType> guard{deviceConnectedCallbackLock, std::adopt_lock};
             for (auto &callback: onDeviceConnectedCallbacks) {
                 std::invoke(callback);
             }
@@ -373,7 +376,6 @@ namespace Device {
          * Call all the disconnection callbacks currently registered.
          */
         inline void fireDeviceDisconnectionEvent() {
-            std::unique_lock<LockType> guard{deviceDisconnectedCallbackLock, std::adopt_lock};
             for (auto &callback: onDeviceDisconnectedCallbacks) {
                 std::invoke(callback);
             }
@@ -394,16 +396,5 @@ namespace Device {
         std::vector<OnDeviceConnected> onDeviceConnectedCallbacks{};
         std::vector<OnDeviceDisconnected> onDeviceDisconnectedCallbacks{};
         std::atomic_bool isConnected{false};
-        const Parameters::ReadOnlyParameters::SystemStatus systemStatus{Parameters::ReadOnlyParameters::SystemStatus{}
-                                                                                .requestLoadIndication()
-                                                                                .requestSystemTimeRaw()
-                                                                                .requestUpTime()
-                                                                                .requestPowerCycles()
-                                                                                .requestOperationTime()
-                                                                                .requestOperationTimeScaled()
-                                                                                .requestCurrentTemperature()
-                                                                                .requestMinimalTemperature()
-                                                                                .requestMaximalTemperature()
-                                                                                .requestStatusFlags()};
     };
 } // namespace Device

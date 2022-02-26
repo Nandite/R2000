@@ -19,16 +19,26 @@ void Device::StatusWatcher::statusWatcherTask() {
     const auto taskId{device->getName() + ".StatusWatcher"};
     pthread_setname_np(pthread_self(), taskId.c_str());
     Device::Commands::GetParametersCommand getParametersCommand{*device};
+    const auto systemStatus{Parameters::ReadOnlyParameters::SystemStatus{}.requestLoadIndication()
+                                    .requestSystemTimeRaw()
+                                    .requestUpTime()
+                                    .requestPowerCycles()
+                                    .requestOperationTime()
+                                    .requestOperationTimeScaled()
+                                    .requestCurrentTemperature()
+                                    .requestMinimalTemperature()
+                                    .requestMaximalTemperature()
+                                    .requestStatusFlags()};
     for (; !interruptFlag.load(std::memory_order_acquire);) {
         auto future{getParametersCommand.asyncExecute(1s, systemStatus)};
         if (!future) {
             std::clog << "StatusWatcher::" << device->getName() << "::Device is busy." << std::endl;
         } else {
             future->wait();
-            const auto result{future->get()};
-            const auto requestResult{result.first};
+            const auto & [requestResult, obtainedParameters]{future->get()};
+            std::scoped_lock scopedGuard{deviceConnectedCallbackLock, deviceDisconnectedCallbackLock};
             if (requestResult == RequestResult::SUCCESS) {
-                setStatusToOutputAndFireNewStatusEvent(std::make_shared<DeviceStatus>(result.second));
+                setStatusToOutputAndFireNewStatusEvent(std::make_shared<DeviceStatus>(obtainedParameters));
                 const auto wasConnected{isConnected.exchange(true, std::memory_order_release)};
                 if (!wasConnected) {
                     fireDeviceConnectionEvent();
@@ -40,7 +50,7 @@ void Device::StatusWatcher::statusWatcherTask() {
                 }
             }
         }
-        std::unique_lock<LockType> interruptGuard{interruptCvLock, std::adopt_lock};
+        std::unique_lock<LockType> interruptGuard{interruptCvLock};
         interruptCv.wait_for(interruptGuard, period,
                              [&]() { return interruptFlag.load(std::memory_order_acquire); });
     }
@@ -49,7 +59,7 @@ void Device::StatusWatcher::statusWatcherTask() {
 Device::StatusWatcher::~StatusWatcher() {
     if (!interruptFlag.load(std::memory_order_acquire)) {
         {
-            std::unique_lock<LockType> guard{interruptCvLock, std::adopt_lock};
+            std::lock_guard<LockType> guard{interruptCvLock};
             interruptFlag.store(true, std::memory_order_release);
             interruptCv.notify_one();
         }
