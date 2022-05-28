@@ -79,8 +79,7 @@ public:
         std::lock_guard<std::mutex> guard{jobLock, std::adopt_lock};
         if (jobs.size() <= maxJob)
         {
-            // jobs.push_back(std::bind(std::forward<Fn>(fn), std::forward<Args>(args)...));
-            jobs.push_back([&]() { std::invoke(std::forward<Fn>(fn), std::forward<Args>(args)...); });
+            jobs.push_back(std::bind(std::forward<Fn>(fn), std::forward<Args>(args)...));
             jobQueueCondition.notify_one();
             return true;
         }
