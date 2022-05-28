@@ -435,25 +435,32 @@ namespace Device {
             const auto numPointReserve{std::min((unsigned int) (numberOfPoints), MAX_RESERVE_POINTS_BUFFER)};
             distances.reserve(numPointReserve);
             amplitudes.reserve(numPointReserve);
-            switch (packetType) {
-                case A: {
-                    payloadEndPosition = internals::PayloadExtractionFromByteRange<A>::retrievePayload(
-                            payloadStart, end, numberOfPoints, distances, amplitudes);
-                    break;
-                }
-                case B: {
-                    payloadEndPosition = internals::PayloadExtractionFromByteRange<B>::retrievePayload(
-                            payloadStart, end, numberOfPoints, distances, amplitudes);
-                    break;
-                }
-                case C: {
-                    payloadEndPosition = internals::PayloadExtractionFromByteRange<C>::retrievePayload(
-                            payloadStart, end, numberOfPoints, distances, amplitudes);
-                    break;
-                }
-                default:
-                    throw std::runtime_error(
-                            "DataLink::Unsupported payload type received from the device: " + packetType);
+            switch (packetType)
+            {
+            case A:
+            {
+                payloadEndPosition = internals::PayloadExtractionFromByteRange<A>::retrievePayload(
+                    payloadStart, end, numberOfPoints, distances, amplitudes);
+                break;
+            }
+            case B:
+            {
+                payloadEndPosition = internals::PayloadExtractionFromByteRange<B>::retrievePayload(
+                    payloadStart, end, numberOfPoints, distances, amplitudes);
+                break;
+            }
+            case C:
+            {
+                payloadEndPosition = internals::PayloadExtractionFromByteRange<C>::retrievePayload(
+                    payloadStart, end, numberOfPoints, distances, amplitudes);
+                break;
+            }
+            default:
+            {
+                std::ostringstream stream{};
+                stream << "DataLink::Unsupported payload type received from the device: " << packetType;
+                throw std::runtime_error(stream.str());
+            }
             }
             scanFactory.addPacket(header, distances, amplitudes);
             return {true, payloadEndPosition, 0};

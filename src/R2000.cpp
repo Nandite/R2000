@@ -208,7 +208,7 @@ bool Device::R2000::AsyncHttpGet(const std::string &request, CommandCallback cal
                 onEndpointResolutionAttemptCompleted(error, request, fn, *deviceEndpoints, timeout);
             }};
             asyncResolver.async_resolve(query, resolverHandler);
-            scheduleEndpointResolverNextDeadline(timeout);
+            scheduleNextEndpointResolutionDeadline(timeout);
         }
         std::unique_lock<std::mutex> guard{ioServiceLock, std::adopt_lock};
         ioServiceTaskCv.notify_one();
@@ -233,7 +233,7 @@ Device::R2000::onEndpointResolutionAttemptCompleted(const boost::system::error_c
             onSocketConnectionAttemptCompleted(error, request, fn);
         }};
         boost::asio::async_connect(asyncSocket, endpointsBegin, endpointsEnd, handleSocketConnectionAttempt);
-        scheduleSocketConnectionNextDeadline(timeout);
+        scheduleNextSocketConnectionDeadline(timeout);
     } else {
         if (error == boost::asio::error::operation_aborted) {
             std::clog << configuration.name << "::Endpoints resolution timeout" << std::endl;
@@ -271,7 +271,7 @@ bool Device::R2000::verifyErrorCode(const Device::PropertyTree &tree) {
     return (code && (*code) == 0 && text && (*text) == "success");
 }
 
-void Device::R2000::scheduleEndpointResolverNextDeadline(std::chrono::milliseconds timeout) {
+void Device::R2000::scheduleNextEndpointResolutionDeadline(std::chrono::milliseconds timeout) {
     resolverDeadline.expires_from_now(
             boost::asio::chrono::milliseconds(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count()));
     resolverDeadline.async_wait([&](const auto &) {
@@ -279,7 +279,7 @@ void Device::R2000::scheduleEndpointResolverNextDeadline(std::chrono::millisecon
     });
 }
 
-void Device::R2000::scheduleSocketConnectionNextDeadline(std::chrono::milliseconds timeout) {
+void Device::R2000::scheduleNextSocketConnectionDeadline(std::chrono::milliseconds timeout) {
     socketDeadline.expires_from_now(
             boost::asio::chrono::milliseconds(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count()));
     socketDeadline.async_wait([&](const auto &) { onSocketConnectionDeadlineReached(); });

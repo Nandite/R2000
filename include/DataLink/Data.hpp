@@ -264,7 +264,7 @@ namespace Device::Data {
         /**
          * @return The timestamp of the scan.
          */
-        [[maybe_unused]] [[nodiscard]] inline const auto &getTimestamp() const noexcept { return timestamp; }
+        [[maybe_unused]] [[nodiscard]] inline auto getTimestamp() const noexcept { return timestamp; }
 
         /**
          * @return True if the scan is empty, False otherwise.

@@ -386,13 +386,13 @@ namespace Device {
          * Schedule a timeout deadline for the asynchronous resolver.
          * @param timeout Maximum time allowed for the resolver to complete before cancelling the operation.
          */
-        void scheduleEndpointResolverNextDeadline(std::chrono::milliseconds timeout);
+        void scheduleNextEndpointResolutionDeadline(std::chrono::milliseconds timeout);
 
         /**
          * Schedule a timeout deadline for the asynchronous socket connection.
          * @param timeout Maximum time allowed for the socket to connect before cancelling the operation.
          */
-        void scheduleSocketConnectionNextDeadline(std::chrono::milliseconds timeout);
+        void scheduleNextSocketConnectionDeadline(std::chrono::milliseconds timeout);
 
     private:
         DeviceConfiguration configuration;
