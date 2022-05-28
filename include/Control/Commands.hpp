@@ -5,7 +5,7 @@
 #pragma once
 
 #include "DeviceHandle.hpp"
-#include "R2000/R2000.hpp"
+#include "R2000.hpp"
 
 namespace Device::Commands {
     struct GetProtocolVersion;

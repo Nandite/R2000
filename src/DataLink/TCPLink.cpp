@@ -4,8 +4,8 @@
 //!
 //! @file
 
-#include "R2000/DataLink/TCPLink.hpp"
-#include "R2000/Control/DeviceHandle.hpp"
+#include "DataLink/TCPLink.hpp"
+#include "Control/DeviceHandle.hpp"
 #include <iostream>
 #include <utility>
 

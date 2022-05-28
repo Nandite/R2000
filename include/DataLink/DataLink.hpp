@@ -7,8 +7,8 @@
 #pragma once
 
 #include "Data.hpp"
-#include "R2000/R2000.hpp"
-#include "R2000/Control/Parameters.hpp"
+#include "R2000.hpp"
+#include "Control/Parameters.hpp"
 #include <atomic>
 #include <cassert>
 #include <climits>

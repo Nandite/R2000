@@ -3,10 +3,10 @@
 //! Any reproduction or use outside B2A Technology is prohibited.
 //!
 //! @file
-#include "R2000/DataLink/DataLink.hpp"
-#include "R2000/Control/DeviceHandle.hpp"
-#include "R2000/R2000.hpp"
-#include <R2000/Control/Commands.hpp>
+#include "DataLink/DataLink.hpp"
+#include "Control/DeviceHandle.hpp"
+#include "R2000.hpp"
+#include <Control/Commands.hpp>
 
 Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle,
                            std::chrono::milliseconds connectionTimeout)

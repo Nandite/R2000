@@ -7,7 +7,7 @@
 #include <chrono>
 #include <optional>
 #include <unordered_map>
-#include "R2000/NotImplementedException.hpp"
+#include "NotImplementedException.hpp"
 
 #define PARAMETER_STATUS_FLAGS "status_flags"
 #define PARAMETER_STATUS_LOAD_INDICATION "load_indication"

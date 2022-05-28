@@ -2,7 +2,7 @@
 // Created by chazz on 22/12/2021.
 //
 
-#include <R2000/StatusWatcher.hpp>
+#include <StatusWatcher.hpp>
 
 Device::DeviceStatus::DeviceStatus(Parameters::ParametersMap parameters)
         : systemStatusMap(std::move(parameters)) {

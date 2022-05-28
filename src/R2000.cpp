@@ -4,8 +4,8 @@
 //!
 //! @file
 
-#include "R2000/R2000.hpp"
-#include "R2000/Control/DeviceHandle.hpp"
+#include "R2000.hpp"
+#include "Control/DeviceHandle.hpp"
 #include <iostream>
 #include <utility>
 

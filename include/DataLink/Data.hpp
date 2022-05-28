@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 #include <system_error>
-#include "R2000/NotImplementedException.hpp"
+#include "NotImplementedException.hpp"
 
 namespace Device::Data {
     /**

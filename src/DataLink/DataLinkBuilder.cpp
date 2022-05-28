@@ -3,11 +3,11 @@
 //! Any reproduction or use outside B2A Technology is prohibited.
 //!
 //! @file
-#include "R2000/Control/DeviceHandle.hpp"
-#include "R2000/DataLink/TCPLink.hpp"
-#include "R2000/DataLink/UDPLink.hpp"
-#include "R2000/R2000.hpp"
-#include <R2000/DataLink/DataLinkBuilder.hpp>
+#include "Control/DeviceHandle.hpp"
+#include "DataLink/TCPLink.hpp"
+#include "DataLink/UDPLink.hpp"
+#include "R2000.hpp"
+#include <DataLink/DataLinkBuilder.hpp>
 
 Device::DataLinkBuilder::DataLinkBuilder(const Parameters::ReadWriteParameters::TcpHandle &builder) {
     requirements.put("protocol", Device::PROTOCOL::TCP);
