@@ -53,7 +53,7 @@ namespace Device {
         /**
          * @return Get the timeout of the watchdog.
          */
-        [[nodiscard]] inline const auto &getWatchdogTimeout() const noexcept { return watchdogTimeout; }
+        [[nodiscard]] inline auto getWatchdogTimeout() const noexcept { return watchdogTimeout; }
 
         /**
          * @return Get the port at which:
