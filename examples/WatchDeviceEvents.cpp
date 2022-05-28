@@ -1,3 +1,22 @@
+// Copyright (c) 2022 Papa Libasse Sow.
+// https://github.com/Nandite/R2000
+// Distributed under the MIT Software License (X11 license).
+//
+// SPDX-License-Identifier: MIT
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+// documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+// the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include "R2000.hpp"
 #include "StatusWatcher.hpp"
 #include <boost/asio.hpp>
@@ -11,7 +30,8 @@ using namespace std::chrono_literals;
  * @param address The address to test.
  * @return True if the address has an ipv4 valid form, False otherwise.
  */
-[[nodiscard]] bool isValidIpv4(const std::string &address) {
+[[nodiscard]] bool isValidIpv4(const std::string& address)
+{
     boost::system::error_code errorCode{};
     const auto ipv4Address{boost::asio::ip::address::from_string(address, errorCode)};
     return !errorCode && ipv4Address.is_v4();
@@ -19,29 +39,31 @@ using namespace std::chrono_literals;
 
 bool interruptProgram{false};
 
-void interrupt(int) {
+void interrupt(int)
+{
     interruptProgram = true;
 }
 
-void printUsage(std::ostream & stream)
+void printUsage(std::ostream& stream)
 {
-    stream << "Execute a device watcher over the network. Program usage:" << std::endl
-        << "./DeviceEventWatcher <ipv4>";
+    stream << "Execute a device events watcher over the network. Program usage:" << std::endl
+           << "./WatchDeviceEvents <ipv4>";
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv)
+{
 
     std::signal(SIGTERM, interrupt);
     std::signal(SIGKILL, interrupt);
     std::signal(SIGINT, interrupt);
 
-    if(argc < 2)
+    if (argc < 2)
     {
         printUsage(std::cout);
         return EXIT_SUCCESS;
     }
     const std::string deviceAddress{argv[1]};
-    if(!isValidIpv4(deviceAddress))
+    if (!isValidIpv4(deviceAddress))
     {
         std::clog << "The provided address is not valid [" << deviceAddress << "]" << std::endl;
         printUsage(std::clog);
@@ -50,16 +72,16 @@ int main(int argc, char **argv) {
 
     const auto device{Device::R2000::makeShared({"R2000", deviceAddress})};
     Device::StatusWatcher statusWatcher{device, 2s};
-    statusWatcher.addOnDeviceConnectedCallback([&]() {
-        std::cout << device->getName() << " has connected at [" << device->getHostname() << "]" << std::endl;
-    });
-    statusWatcher.addOnDeviceDisconnectedCallback([&]() {
-        std::cout << device->getName() << " has disconnected at [" << device->getHostname() << "]" << std::endl;
-    });
-    while (!interruptProgram) {
+    statusWatcher.addOnDeviceConnectedCallback(
+        [&]()
+        { std::cout << device->getName() << " has connected at [" << device->getHostname() << "]" << std::endl; });
+    statusWatcher.addOnDeviceDisconnectedCallback(
+        [&]()
+        { std::cout << device->getName() << " has disconnected at [" << device->getHostname() << "]" << std::endl; });
+    while (!interruptProgram)
+    {
         std::this_thread::sleep_for(1s);
     }
     std::cout << std::endl << "Stopping device event." << std::endl;
     return EXIT_SUCCESS;
 }
-
