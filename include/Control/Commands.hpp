@@ -167,7 +167,7 @@ namespace Device::Commands {
              */
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
                 const auto deviceAnswer{device.sendHttpCommand(COMMAND_GET_PROTOCOL_INFO)};
-                if (deviceAnswer) {
+                if (!deviceAnswer) {
                     return {deviceAnswer.getRequestResult(), {}, {}};
                 }
                 const auto &[info, commands]{extractInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
@@ -437,8 +437,9 @@ namespace Device::Commands {
              * @param callable a callback called once the command has executed with the result.
              * @return True if the command is being handled, False if the device is busy.
              */
-            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle, std::chrono::milliseconds timeout,
-                                               std::function<void(const AsyncResultType &)> callable) {
+            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle,
+                                               std::function<void(const AsyncResultType &)> callable,
+                                               std::chrono::milliseconds timeout) {
                 return device.asyncSendHttpCommand(
                         COMMAND_RELEASE_HANDLE, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
                         [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
@@ -515,8 +516,9 @@ namespace Device::Commands {
              * @param callable a callback called once the command has executed with the result.
              * @return True if the command is being handled, False if the device is busy.
              */
-            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle, std::chrono::milliseconds timeout,
-                                               std::function<void(const AsyncResultType &)> callable) {
+            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle,
+                                               std::function<void(const AsyncResultType &)> callable,
+                                               std::chrono::milliseconds timeout) {
                 return device.asyncSendHttpCommand(
                         COMMAND_START_SCAN_OUTPUT, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
                         [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
@@ -593,8 +595,9 @@ namespace Device::Commands {
              * @param callable a callback called once the command has executed with the result.
              * @return True if the command is being handled, False if the device is busy.
              */
-            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle, std::chrono::milliseconds timeout,
-                                               std::function<void(const AsyncResultType &)> callable) {
+            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle,
+                                               std::function<void(const AsyncResultType &)> callable,
+                                               std::chrono::milliseconds timeout) {
                 return device.asyncSendHttpCommand(
                         COMMAND_STOP_SCAN_OUTPUT, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
                         [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
@@ -671,8 +674,9 @@ namespace Device::Commands {
              * @param callable a callback called once the command has executed with the result.
              * @return True if the command is being handled, False if the device is busy.
              */
-            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle, std::chrono::milliseconds timeout,
-                                               std::function<void(const AsyncResultType &)> callable) {
+            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle,
+                                               std::function<void(const AsyncResultType &)> callable,
+                                               std::chrono::milliseconds timeout) {
                 return device.asyncSendHttpCommand(
                         COMMAND_FEED_WATCHDOG, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
                         [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
@@ -716,7 +720,7 @@ namespace Device::Commands {
                 const auto &[chain, ignore]{chainAndConvertParametersToString(std::forward<Args>(args)...)};
                 const auto deviceAnswer{
                         device.sendHttpCommand(COMMAND_GET_PARAMETER, PARAMETER_NAME_LIST, chain)};
-                if (deviceAnswer) {
+                if (!deviceAnswer) {
                     return {deviceAnswer.getRequestResult(), {}};
                 }
                 return {deviceAnswer.getRequestResult(),
@@ -766,25 +770,25 @@ namespace Device::Commands {
              * @return True if the command is being handled, False if the device is busy.
              */
             template<typename... Args>
-            [[maybe_unused]] bool asyncExecute(std::chrono::milliseconds timeout,
-                                               std::function<void(const AsyncResultType &)> callable, Args &&... args) {
-                static_assert(
-                        std::conjunction_v<std::is_base_of<Parameters::ReadOnlyRequestBuilder, typename std::decay_t<Args>>...>,
-                        "All the provided handle must be of type ReadOnlyRequestBuilder");
-                const auto &[chain, parameters]{chainAndConvertParametersToString(std::forward<Args>(args)...)};
+            [[maybe_unused]] bool asyncExecute(Parameters::ReadOnlyRequestBuilder parameters,
+                                               std::function<void(const AsyncResultType &)> callable,
+                                               std::chrono::milliseconds timeout) {
+                auto [stringChainOfParameters, sequenceOfParameters]{chainAndConvertParametersToString(parameters)};
                 return device.asyncSendHttpCommand(
-                        COMMAND_GET_PARAMETER, {{PARAMETER_NAME_LIST, chain}}, [fn = std::move(callable),
-                                parameters = std::move(parameters)](
-                                const Device::DeviceAnswer &result) -> void {
-                            if (!result) {
-                                std::invoke(fn, AsyncResultType{result.getRequestResult(), {}});
-                                return;
-                            }
-                            const auto receivedParameters{
-                                    extractParametersValues(parameters, result.getPropertyTree())};
-                            std::invoke(fn, AsyncResultType{result.getRequestResult(), {receivedParameters}});
-                        },
-                        timeout);
+                    COMMAND_GET_PARAMETER, {{PARAMETER_NAME_LIST, stringChainOfParameters}},
+                    [fn = std::move(callable),
+                     sequenceOfParameters = std::move(sequenceOfParameters)](const Device::DeviceAnswer& result) -> void
+                    {
+                        if (!result)
+                        {
+                            std::invoke(fn, AsyncResultType{result.getRequestResult(), {}});
+                            return;
+                        }
+                        const auto receivedParameters{
+                            extractParametersValues(sequenceOfParameters, result.getPropertyTree())};
+                        std::invoke(fn, AsyncResultType{result.getRequestResult(), {receivedParameters}});
+                    },
+                    timeout);
             }
 
         private:
@@ -898,15 +902,11 @@ namespace Device::Commands {
              */
             template<typename... Args>
             [[maybe_unused]] bool
-            asyncExecute(std::chrono::milliseconds timeout, std::function<void(const AsyncResultType &)> callable,
-                         Args &&... args) {
-                static_assert(
-                        std::conjunction_v<std::is_base_of<Parameters::ReadWriteRequestBuilder, typename std::decay_t<Args>>...>,
-                        "All the provided handle must be of type ReadWriteRequestBuilder");
-                Parameters::ParametersMap parameters{};
-                ParametersChaining::template map(parameters, std::forward<Args>(args)...);
+            asyncExecute(const Parameters::ReadWriteRequestBuilder& parameters,
+                         std::function<void(const AsyncResultType &)> callable,
+                         std::chrono::milliseconds timeout) {
                 return device.asyncSendHttpCommand(
-                        COMMAND_SET_PARAMETER, parameters,
+                        COMMAND_SET_PARAMETER, parameters.build(),
                         [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             std::invoke(fn, result.getRequestResult());
                         },
@@ -935,7 +935,7 @@ namespace Device::Commands {
              */
             [[nodiscard]] [[maybe_unused]] ResultType execute() {
                 const auto deviceAnswer{device.sendHttpCommand(COMMAND_LIST_PARAMETERS)};
-                if (deviceAnswer) {
+                if (!deviceAnswer) {
                     return {deviceAnswer.getRequestResult(), {}};
                 }
                 return {deviceAnswer.getRequestResult(),
@@ -1077,14 +1077,12 @@ namespace Device::Commands {
              * @return True if the command is being handled, False if the device is busy.
              */
             template<typename... Args>
-            [[maybe_unused]] bool asyncExecute(std::chrono::milliseconds timeout,
-                                               std::function<void(const AsyncResultType &)> callable, Args &&... args) {
-                static_assert(
-                        std::conjunction_v<std::is_base_of<Parameters::ReadWriteRequestBuilder, typename std::decay_t<Args>>...>,
-                        "All the provided handle must be of type ReadWriteRequestBuilder");
-                const auto parameters{chainAndConvertParametersToString(std::forward<Args>(args)...)};
+            [[maybe_unused]] bool asyncExecute(Parameters::ReadWriteRequestBuilder parameters,
+                                               std::function<void(const AsyncResultType &)> callable,
+                                               std::chrono::milliseconds timeout) {
+                const auto parametersAsString{chainAndConvertParametersToString(parameters)};
                 return device.asyncSendHttpCommand(
-                        COMMAND_RESET_PARAMETERS, {{PARAMETER_NAME_LIST, parameters}},
+                        COMMAND_RESET_PARAMETERS, {{PARAMETER_NAME_LIST, parametersAsString}},
                         [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
                             std::invoke(fn, result.getRequestResult());
                         },
@@ -1254,7 +1252,7 @@ namespace Device::Commands {
             execute(const Parameters::ReadWriteParameters::TcpHandle &builder) {
                 const auto parameters{builder.build()};
                 const auto deviceAnswer{device.sendHttpCommand(COMMAND_REQUEST_TCP_HANDLE, parameters)};
-                if (deviceAnswer) {
+                if (!deviceAnswer) {
                     return {deviceAnswer.getRequestResult(), {}, {}};
                 }
                 const auto[port, handle]{extractHandleInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
@@ -1353,7 +1351,7 @@ namespace Device::Commands {
             execute(const Parameters::ReadWriteParameters::UdpHandle &builder) {
                 const auto parameters{builder.build()};
                 const auto deviceAnswer{device.sendHttpCommand(COMMAND_REQUEST_UDP_HANDLE, parameters)};
-                if (deviceAnswer) {
+                if (!deviceAnswer) {
                     return {deviceAnswer.getRequestResult(), {}};
                 }
                 const auto handle{extractHandleInfoFromPropertyTree(deviceAnswer.getPropertyTree())};
@@ -1494,8 +1492,9 @@ namespace Device::Commands {
              * @param callable a callback called once the command has executed with the result.
              * @return True if the command is being handled, False if the device is busy.
              */
-            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle, std::chrono::milliseconds timeout,
-                                               std::function<void(const AsyncResultType &)> callable) {
+            [[maybe_unused]] bool asyncExecute(const Device::DeviceHandle &handle,
+                                               std::function<void(const AsyncResultType &)> callable,
+                                               std::chrono::milliseconds timeout) {
                 return device.asyncSendHttpCommand(
                         COMMAND_GET_SCAN_OUTPUT_CONFIG, {{PARAMETER_NAME_HANDLE, handle.getValue()}},
                         [fn = std::move(callable)](const Device::DeviceAnswer &result) -> void {
@@ -1596,8 +1595,9 @@ namespace Device::Commands {
              * @return True if the command is being handled, False if the device is busy.
              */
             [[maybe_unused]] bool
-            asyncExecute(const Parameters::HandleParameters &builder, std::chrono::milliseconds timeout,
-                         std::function<void(const AsyncResultType &)> callable) {
+            asyncExecute(const Parameters::HandleParameters &builder,
+                         std::function<void(const AsyncResultType &)> callable,
+                         std::chrono::milliseconds timeout) {
                 const auto parameters{builder.build()};
                 return device.asyncSendHttpCommand(
                         COMMAND_SET_SCAN_OUTPUT_CONFIG, parameters,

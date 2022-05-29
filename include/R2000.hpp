@@ -145,7 +145,7 @@ namespace Device {
      * @param result The RequestResult to convert.
      * @return The RequestResult as a string.
      */
-    inline std::string asyncResultToString(RequestResult result) {
+    inline std::string requestResultToString(RequestResult result) {
         switch (result) {
             case RequestResult::SUCCESS:
                 return "Success";

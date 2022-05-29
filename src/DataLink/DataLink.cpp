@@ -26,7 +26,7 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<Devic
                            std::chrono::milliseconds connectionTimeout)
         : device(std::move(iDevice)), deviceHandle(std::move(iHandle)) {
     if (!Device::Commands::StartScanCommand{*device}.asyncExecute(
-            *deviceHandle, connectionTimeout,
+            *deviceHandle,
             [&](const auto &result) -> void {
                 if (result == RequestResult::SUCCESS) {
                     isConnected.store(true, std::memory_order_release);
@@ -35,10 +35,10 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<Devic
                     }
                 } else {
                     std::clog << device->getName() << "::DataLink::Could not request the device to start the stream ("
-                              << asyncResultToString(result) << ")" << std::endl;
+                              << requestResultToString(result) << ")" << std::endl;
                     isConnected.store(false, std::memory_order_release);
                 }
-            })) {
+            },connectionTimeout)) {
         isConnected.store(false, std::memory_order_release);
         std::clog << device->getName() << "::DataLink::Could not request the device to start the stream." << std::endl;
         return;
@@ -63,7 +63,7 @@ Device::DataLink::~DataLink() {
             const auto result{stopScanFuture->get()};
             if (result != RequestResult::SUCCESS) {
                 std::clog << device->getName() << "::DataLink::Could not stop the data stream ("
-                          << asyncResultToString(result) << ")"
+                          << requestResultToString(result) << ")"
                           << std::endl;
             }
         }
@@ -73,7 +73,7 @@ Device::DataLink::~DataLink() {
             const auto result{releaseHandleFuture->get()};
             if (result != RequestResult::SUCCESS) {
                 std::clog << device->getName() << "::DataLink::Could not release the handle ("
-                          << asyncResultToString(result) << ")"
+                          << requestResultToString(result) << ")"
                           << std::endl;
             }
         }

@@ -71,15 +71,17 @@ int main(int argc, char** argv)
                               .withWatchdogTimeout(5000)};
     auto future{Device::DataLinkBuilder(handleParameters).build(device, 1s)};
     future.wait();
-    auto [asyncRequestResult, dataLink]{future.get()};
-    if (asyncRequestResult != Device::RequestResult::SUCCESS) {
+    auto [requestResult, dataLink]{future.get()};
+    if (requestResult != Device::RequestResult::SUCCESS)
+    {
         std::clog << "Could not establish a data link with sensor at " << device->getHostname() << " ("
-                  << Device::asyncResultToString(asyncRequestResult) << ")." << std::endl;
+                  << Device::requestResultToString(requestResult) << ")." << std::endl;
         return EXIT_FAILURE;
     }
     dataLink->addOnNewScanAvailableCallback(
-        [&](const Device::DataLink::SharedScan& newScan)
+        [](const auto& newScan)
         { std::cout << "Scan number [" << newScan->getHeaders()[0].scanNumber << "] has been received" << std::endl; });
+
     while (!interruptProgram)
     {
         std::this_thread::sleep_for(1s);
