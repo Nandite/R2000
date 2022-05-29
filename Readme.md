@@ -354,6 +354,21 @@ It will generate 3 executables:
 # or
 ./AcquireScan 192.168.2.30
 ```
+
+## Troubleshooting
+
+- Using the UDP mode, mind that the address given to the builder with the UdpHandle is not the device address, but the address where the sensor must send the datagrams.
+It is usually the address of the machine running this communication interface.
+- Be careful of the firewall. It can restrict both the configuration packet on TCP and the scans on TCP and UDP.
+In some cases, the firewall allows the configuration packet to flow through, but the DataLinks doesn't receive the
+scans in UDP. Make sure that the firewall accepts both the configuration packets on TCP and the scans on UDP.
+- Using the DataLinks without watchdog enabled and killing the application without destroying the DataLinks 
+can cause "zombie" links within the sensors. Current software revisions of the R2000 only allows at most 3 streams of scans.
+Trying to set up more DataLink when this maximum number is reached (due to zombie links or because the device is already
+streaming scans to 3 clients) will result in failure.
+**In any case, it is strongly advised to set up the DataLinks with watchdog enabled, so that the sensor can kill 
+automatically "zombie" links.**
+
 ## Feedback
 
 Don't hesitate if you have any suggestions for improving this project, or if you find any error. I will be glad to
