@@ -125,7 +125,7 @@ namespace Device {
     private:
         using WatchdogConfiguration = std::pair<bool, std::chrono::milliseconds>;
     public:
-        using AsyncBuildResult = std::pair<RequestResult, std::shared_ptr<DataLink>>;
+        using BuildResult = std::pair<RequestResult, std::shared_ptr<DataLink>>;
 
     public:
         /**
@@ -147,7 +147,7 @@ namespace Device {
          * @param device The device to build the link with.
          * @return A shared pointer containing the built DataLink or nullptr if an error has occurred.
          */
-        std::shared_ptr<DataLink> build(const std::shared_ptr<Device::R2000> &device) noexcept(false);
+        BuildResult build(const std::shared_ptr<Device::R2000> &device) noexcept(false);
 
         /**
          * Asynchronously construct a new DataLink for a device using the stored configuration. The method returns a
@@ -158,7 +158,7 @@ namespace Device {
          * @return a future of pair containing the result of the build request and if successful and the
          * built DataLink. If the request has failed, the DataLink evaluates to nullptr.
          */
-        std::future<AsyncBuildResult> build(const std::shared_ptr<Device::R2000> &device,
+        std::future<BuildResult> build(const std::shared_ptr<Device::R2000> &device,
                                             std::chrono::milliseconds timeout) noexcept(false);
 
     private:
@@ -227,7 +227,7 @@ namespace Device {
          * @param device The device to make the link with.
          * @return A shared pointer containing the DataLink or nullptr if the link could not be established.
          */
-        std::shared_ptr<DataLink>
+        BuildResult
         constructDataLink(const std::shared_ptr<Device::R2000> &device) noexcept(false);
 
         /**
@@ -237,7 +237,7 @@ namespace Device {
          * @return a future that contains the result of the request and a DataLink (or nullptr if the link could not
          * be established).
          */
-        std::future<AsyncBuildResult> constructDataLink(const std::shared_ptr<Device::R2000> &device,
+        std::future<BuildResult> constructDataLink(const std::shared_ptr<Device::R2000> &device,
                                                         std::chrono::milliseconds timeout) noexcept(true);
 
     private:
