@@ -16,7 +16,7 @@ find_package(Threads REQUIRED)
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.68.0 COMPONENTS filesystem REQUIRED)
+find_package(Boost 1.64.0 COMPONENTS filesystem REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 link_directories(${Boost_LIBRARY_DIR})
 ############################################################################
@@ -24,7 +24,7 @@ link_directories(${Boost_LIBRARY_DIR})
 add_executable(DeviceEventWatch include
         src/R2000.cpp
         src/StatusWatcher.cpp
-        examples/WatchDeviceEvents.cpp examples/AcquireScan.cpp)
+        examples/WatchDeviceEvents.cpp)
 target_link_libraries(DeviceEventWatch
         PRIVATE ${CMAKE_DL_LIBS}
         ${Boost_PROGRAM_OPTIONS_LIBRARIES}
