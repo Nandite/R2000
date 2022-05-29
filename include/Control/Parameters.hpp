@@ -722,11 +722,10 @@ namespace Device::Parameters {
     } // namespace internals
 
     template<typename AccessType>
-    class ParametersRequestBuilder;
+    struct ParametersRequestBuilder;
 
     template<>
-    class ParametersRequestBuilder<ReadOnly> {
-    public:
+    struct ParametersRequestBuilder<ReadOnly> {
         using BasicInformation [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadOnly::BasicInformation>;
         using Capabilities [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadOnly::Capabilities>;
         using Ethernet [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadOnly::Ethernet>;
@@ -735,8 +734,7 @@ namespace Device::Parameters {
     };
 
     template<>
-    class ParametersRequestBuilder<ReadWrite> {
-    public:
+    struct ParametersRequestBuilder<ReadWrite> {
         using BasicInformation [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadWrite::BasicInformation>;
         using Ethernet [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadWrite::Ethernet>;
         using Measure [[maybe_unused]] = internals::ParametersRequestBuilderImpl<ReadWrite::Measuring>;
