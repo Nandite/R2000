@@ -146,6 +146,8 @@ The Commands object are lightweight proxies that take Parameters objects (or not
 interpretable by the sensor to modify its internal state or to perform an action.
 There are sixteen constructible commands available to interact with the sensors:
 ```cpp
+#include <Control/Commands.hpp>
+// ...
 Device::Commands::GetProtocolVersionCommand getProtocolVersionCommand{*device};
 Device::Commands::GetProtocolInfoCommand getProtocolInfoCommand{*device};
 Device::Commands::ReleaseHandleCommand releaseHandleCommand{*device};
