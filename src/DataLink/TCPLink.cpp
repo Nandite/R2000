@@ -98,12 +98,10 @@ void Device::TCPLink::onBytesReceived(const boost::system::error_code &error, un
     insertByteRangeIntoExtractionBuffer(begin, end);
     const auto from{std::cbegin(extractionByteBuffer)};
     const auto to{std::cend(extractionByteBuffer)};
-    const auto extractionResult{tryExtractingScanFromByteRange(from, to)};
-    const auto until{std::get<0>(extractionResult)};
-    const auto numberOfBytesToTransfer{std::get<1>(extractionResult)};
-    const auto &sizeOfAFullScan{std::get<2>(extractionResult)};
+    const auto [until, numberOfBytesToTransfer, sizeOfAFullScan]{tryExtractingScanFromByteRange(from, to)};
     removeUsedByteRangeFromExtractionBufferBeginningUntil(until);
-    if (sizeOfAFullScan) {
+    if (sizeOfAFullScan)
+    {
         resizeReceptionAndExtractionBuffers(*sizeOfAFullScan);
     }
     boost::asio::async_read(*socket, boost::asio::buffer(receptionByteBuffer),
