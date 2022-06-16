@@ -337,7 +337,8 @@ namespace Device {
          * @param requestPath The http request path to send.
          * @return  A HttpResult object containing the status code, the header and the content of the answer.
          */
-        [[nodiscard]] static DeviceAnswer HttpGet(boost::asio::ip::tcp::socket &socket, const std::string &requestPath);
+        [[nodiscard]] static DeviceAnswer HttpGet(boost::asio::ip::tcp::socket& socket,
+                                                  const std::string& requestPath) noexcept(false);
 
         /**
          * Asynchronously send a HTTP GET request to the device with a timeout.

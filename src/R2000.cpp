@@ -63,7 +63,7 @@ noexcept(false) {
     if (request.back() == '&') {
         request.pop_back();
     }
-    try {
+    try { // TODO : Remove try catch for system_error. Only catch parsing errors.
         return HttpGet(request);
     }
     catch (const std::system_error &error) {
@@ -115,7 +115,7 @@ Device::DeviceAnswer Device::R2000::HttpGet(boost::asio::ip::tcp::socket &socket
         boost::system::error_code error{boost::asio::error::host_not_found};
         boost::asio::write(socket, request, error);
         if (error) {
-            throw std::system_error{error};
+            return DeviceAnswer{RequestResult::FAILED};
         }
     }
     boost::asio::streambuf response{};
@@ -123,7 +123,7 @@ Device::DeviceAnswer Device::R2000::HttpGet(boost::asio::ip::tcp::socket &socket
         boost::system::error_code error{boost::asio::error::host_not_found};
         boost::asio::read_until(socket, response, "\r\n", error);
         if (error) {
-            throw std::system_error{error};
+            return DeviceAnswer{RequestResult::FAILED};
         }
     }
 
@@ -144,7 +144,7 @@ Device::DeviceAnswer Device::R2000::HttpGet(boost::asio::ip::tcp::socket &socket
         // Read the response headers, which are terminated by a blank line.
         boost::asio::read_until(socket, response, "\r\n\r\n", error);
         if (error) {
-            throw std::system_error{error};
+            return DeviceAnswer{RequestResult::FAILED};
         }
     }
 
@@ -164,7 +164,7 @@ Device::DeviceAnswer Device::R2000::HttpGet(boost::asio::ip::tcp::socket &socket
         }
     }
     if (error != boost::asio::error::eof) {
-        throw std::system_error{error};
+        return DeviceAnswer{RequestResult::FAILED};
     }
 
     for (auto &character: content) {
@@ -202,7 +202,7 @@ Device::DeviceAnswer Device::R2000::HttpGet(const std::string &requestPath) cons
             socket.connect(*endpointIterator++, error);
         }
         if (error) {
-            throw std::system_error{error};
+            return DeviceAnswer{RequestResult::FAILED};
         }
     }
 
@@ -265,8 +265,18 @@ Device::R2000::onSocketConnectionAttemptCompleted(const boost::system::error_cod
     boost::system::error_code placeholder{};
     socketDeadline.cancel(placeholder);
     if (!error) {
-        const auto result{HttpGet(asyncSocket, request)};
-        std::invoke(callable, result);
+        try
+        {
+            const auto result{HttpGet(asyncSocket, request)};
+            std::invoke(callable, result);
+        }
+        // TODO : std::exception is too broad. We need to catch the parsing errors...
+        //  It is a temporary fix.
+        catch (const std::exception& e)
+        {
+            std::clog << configuration.name << ":: HttpGet exception (" << e.what() << ")" << std::endl;
+            std::invoke(callable, DeviceAnswer{RequestResult::FAILED});
+        }
     } else {
         if (error == boost::asio::error::operation_aborted) {
             std::invoke(callable, DeviceAnswer{RequestResult::TIMEOUT});
