@@ -313,7 +313,12 @@ namespace Device {
          * @param sharedDevice The device to watch.
          * @param period The period of the status update request to the device.
          */
-        StatusWatcher(std::shared_ptr<R2000> sharedDevice, std::chrono::seconds period);
+        template <typename... Args>
+        explicit StatusWatcher(std::chrono::seconds iPeriod, Args... args)
+            : device(R2000::makeShared(std::forward<Args>(args)...)), period(iPeriod)
+        {
+            statusWatcherTaskFuture = std::async(std::launch::async, &StatusWatcher::statusWatcherTask, this);
+        }
 
         /**
          * @return True if the connection to the device is alive, False otherwise.

@@ -25,11 +25,6 @@ Device::DeviceStatus::DeviceStatus(Parameters::ParametersMap parameters)
 
 Device::StatusFlagInterpreter::StatusFlagInterpreter(const uint32_t flags) : flags(flags) {}
 
-Device::StatusWatcher::StatusWatcher(std::shared_ptr<R2000> sharedDevice, std::chrono::seconds period)
-        : device(std::move(sharedDevice)), period(period) {
-    statusWatcherTaskFuture = std::async(std::launch::async, &StatusWatcher::statusWatcherTask, this);
-}
-
 void Device::StatusWatcher::statusWatcherTask() {
     const auto taskId{device->getName() + ".StatusWatcher"};
     pthread_setname_np(pthread_self(), taskId.c_str());
@@ -47,9 +42,8 @@ void Device::StatusWatcher::statusWatcherTask() {
     for (; !interruptFlag.load(std::memory_order_acquire);) {
         auto future{getParametersCommand.asyncExecute(1s, systemStatus)};
         if (!future) {
-            std::clog << "StatusWatcher::" << device->getName() << "::Device is busy." << std::endl;
+            std::clog << device->getName() << "StatusWatcher:: Device is busy." << std::endl;
         } else {
-            future->wait();
             const auto & [requestResult, obtainedParameters]{future->get()};
             std::scoped_lock scopedGuard{deviceConnectedCallbackLock, deviceDisconnectedCallbackLock};
             if (requestResult == RequestResult::SUCCESS) {
