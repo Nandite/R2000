@@ -303,6 +303,11 @@ namespace Device {
         [[nodiscard]] inline auto getName() const { return configuration.name; }
 
         /**
+         * @return The configuration of the device.
+         */
+        const DeviceConfiguration& getConfiguration() const { return configuration; }
+
+        /**
          * Release the resources (mainly network)
          */
         virtual ~R2000();
