@@ -295,7 +295,6 @@ namespace Device::Commands {
                     if (!future) {
                         return {Device::RequestResult::FAILED, Parameters::PFSDP::UNKNOWN};
                     }
-                    future->wait();
                     const auto &[requestResult, parameters, ignore]{future->get()};
                     if (requestResult != Device::RequestResult::SUCCESS) {
                         return {requestResult, Parameters::PFSDP::UNKNOWN};

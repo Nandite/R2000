@@ -59,7 +59,6 @@ Device::DataLink::~DataLink() {
 
         auto stopScanFuture{Device::Commands::StopScanCommand{*device}.asyncExecute(*deviceHandle, 1s)};
         if (stopScanFuture) {
-            stopScanFuture->wait();
             const auto result{stopScanFuture->get()};
             if (result != RequestResult::SUCCESS) {
                 std::clog << device->getName() << "::DataLink::Could not stop the data stream ("
@@ -69,7 +68,6 @@ Device::DataLink::~DataLink() {
         }
         auto releaseHandleFuture{Device::Commands::ReleaseHandleCommand{*device}.asyncExecute(*deviceHandle, 1s)};
         if (releaseHandleFuture) {
-            releaseHandleFuture->wait();
             const auto result{releaseHandleFuture->get()};
             if (result != RequestResult::SUCCESS) {
                 std::clog << device->getName() << "::DataLink::Could not release the handle ("
@@ -94,7 +92,6 @@ void Device::DataLink::watchdogTask(std::chrono::seconds commandTimeout) {
         if (!future) {
             isConnected.store(false, std::memory_order_release);
         } else {
-            future->wait();
             auto result{future->get()};
             if (result == RequestResult::SUCCESS) {
                 isConnected.store(true, std::memory_order_release);

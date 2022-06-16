@@ -44,7 +44,6 @@ auto handleParameters{Device::Parameters::ReadWriteParameters::TcpHandle{}
                               .withWatchdogTimeout(5000)}; // Request a Tcp channel with watchdog enabled
 auto future{Device::DataLinkBuilder(handleParameters).build(device, 1s)}; // Build the channel asynchronously with 1s timeout
 // Do some stuff if you want while the channel is being built
-future.wait(); // Wait for the channel to be built if nothing else has to be done
 auto [asyncRequestResult, dataLink]{future.get()}; // Get the result and the DataLink
 if (asyncRequestResult != Device::RequestResult::SUCCESS) {
     // There was an error building the channel, check requestResult value
@@ -184,7 +183,6 @@ if(!future)
     // The command could not been submitted for execution
 }
 // Do something else ...
-future->wait();
 auto result{future->get()};
 
 // or
@@ -273,7 +271,6 @@ auto udpHandleParameters{Device::Parameters::ReadWriteParameters::UdpHandle{}
                               .withWatchdogTimeout(5000)};
 auto future{Device::DataLinkBuilder(udpHandleParameters).build(device, 1s)};
 // Do something else
-future.wait();
 auto [requestResult, dataLink]{future.get()};
 ```
 
