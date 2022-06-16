@@ -425,6 +425,6 @@ namespace Device {
         std::condition_variable ioServiceTaskCv{};
         std::mutex ioServiceLock{};
         std::atomic_bool interruptIoServiceTask{false};
-        Worker worker{1};
+        Worker worker{};
     };
 } // namespace Device
