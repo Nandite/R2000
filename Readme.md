@@ -363,8 +363,7 @@ scans in UDP. Make sure that the firewall accepts both the configuration packets
 can cause "zombie" links within the sensors. Current software revisions of the R2000 only allows at most 3 streams of scans.
 Trying to set up more DataLink when this maximum number is reached (due to zombie links or because the device is already
 streaming scans to 3 clients) will result in failure.
-**In any case, it is strongly advised to set up the DataLinks with watchdog enabled, so that the sensor can kill 
-automatically "zombie" links.**
+**In any case, it is strongly advised to set up the DataLinks with watchdog enabled, so that the sensor can automatically kill "zombie" links.**
 
 ## Feedback
 
