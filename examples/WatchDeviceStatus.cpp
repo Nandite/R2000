@@ -69,8 +69,8 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    const auto device{Device::R2000::makeShared({"R2000", deviceAddress})};
-    std::unique_ptr<Device::StatusWatcher> statusWatcher{std::make_unique<Device::StatusWatcher>(device, 5s)};
+    Device::DeviceConfiguration configuration{"R2000", deviceAddress};
+    std::unique_ptr<Device::StatusWatcher> statusWatcher{std::make_unique<Device::StatusWatcher>(5s, configuration)};
     statusWatcher->addOnStatusAvailableCallback(
         [](auto status)
         {

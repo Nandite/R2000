@@ -69,15 +69,14 @@ int main(int argc, char** argv)
         printUsage(std::clog);
         return EXIT_FAILURE;
     }
-
-    const auto device{Device::R2000::makeShared({"R2000", deviceAddress})};
-    Device::StatusWatcher statusWatcher{device, 2s};
+    Device::DeviceConfiguration configuration{"R2000", deviceAddress};
+    Device::StatusWatcher statusWatcher{2s, configuration};
     statusWatcher.addOnDeviceConnectedCallback(
         [&]()
-        { std::cout << device->getName() << " has connected at [" << device->getHostname() << "]" << std::endl; });
+        { std::cout << configuration.name << " has connected at [" << configuration.deviceAddress << "]" << std::endl; });
     statusWatcher.addOnDeviceDisconnectedCallback(
         [&]()
-        { std::cout << device->getName() << " has disconnected at [" << device->getHostname() << "]" << std::endl; });
+        { std::cout << configuration.name << " has disconnected at [" << configuration.deviceAddress << "]" << std::endl; });
     while (!interruptProgram)
     {
         std::this_thread::sleep_for(1s);
