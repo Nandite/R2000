@@ -70,7 +70,6 @@ int main(int argc, char** argv)
                               .withWatchdog()
                               .withWatchdogTimeout(5000)};
     auto future{Device::DataLinkBuilder(handleParameters).build(device, 1s)};
-    future.wait();
     auto [requestResult, dataLink]{future.get()};
     if (requestResult != Device::RequestResult::SUCCESS)
     {
