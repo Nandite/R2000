@@ -84,13 +84,13 @@ namespace Device {
     class DeviceConfiguration {
     public:
         /**
-         * @param name The name of the device.
+         * @param deviceName The name of the device.
          * @param deviceAddress The ipv4 device address.
          * @param port The Http port of the device.
          */
-        [[maybe_unused]] DeviceConfiguration(std::string name, const std::string &deviceAddress,
+        [[maybe_unused]] DeviceConfiguration(std::string deviceName, const std::string &deviceAddress,
                                              unsigned short port = 80)
-                : name(std::move(name)),
+                : name(std::move(deviceName)),
                   deviceAddress(boost::asio::ip::address::from_string(deviceAddress)),
                   httpServicePort(port) {
         }
@@ -161,8 +161,9 @@ namespace Device {
                 return "Not Found";
             case RequestResult::INVALID_DEVICE_RESPONSE:
                 return "Invalid device response";
+            default:
+                return "Unknown";
         }
-        return "Unknown";
     }
 
     class DeviceAnswer {
