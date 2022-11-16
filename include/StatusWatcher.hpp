@@ -486,6 +486,16 @@ namespace Device {
         };
 
         /**
+         * Set the number of consecutive request failures to reach before triggering a disconnection event.
+         * The time T it will takes for the Watcher to trigger the disconnection event is proportional to its period
+         * and the threshold: T >= threshold * period, given a number of consecutive failure equals to threshold.
+         * @param threshold The number of request failure to reach before triggering a disconnection event.
+         */
+        [[maybe_unused]] inline void setDisconnectionTriggerThreshold(std::int64_t threshold){
+            disconnectionTriggerThreshold.store(threshold, std::memory_order_release);
+        }
+
+        /**
          * Stop the watcher task.
          */
         virtual ~StatusWatcher();
@@ -542,5 +552,6 @@ namespace Device {
         std::vector<OnDeviceConnected> onDeviceConnectedCallbacks{};
         std::vector<OnDeviceDisconnected> onDeviceDisconnectedCallbacks{};
         std::atomic_bool isConnected{false};
+        std::atomic_uint64_t disconnectionTriggerThreshold{3};
     };
 } // namespace Device
