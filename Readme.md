@@ -1,6 +1,16 @@
 R2000
 ===============
 
+<p align="center"><img src="res/r2000.jpg" width="200" height="200"/></p>
+
+[![][license-image]][license]
+![][platform-image]
+
+[license-image]: https://img.shields.io/badge/license-MIT-green.svg?style=flat-square
+[license]: https://github.com/Nandite/PclWalkerViewer/blob/master/LICENSE
+
+[platform-image]: https://img.shields.io/badge/platorms-linux64%20%7C%20osx%20%7C%20windows-lightgrey?style=flat-square
+
 This is an implementation of a communication interface for the [OMDxxx - R2000](https://www.pepperl-fuchs.com/global/en/R2000_Detection_laser_scanner.htm) 
 sensors series of Pepperl+Fuchs in C++17 for embedded applications. 
 This interface offers to quickly set up the sensor for scan acquisition in TCP or UDP channels. Advanced configuration 

@@ -208,7 +208,7 @@ namespace Device {
          * Get the status flag of the device.
          * @return a StatusFlagInterpreter allowing to query the state of the device.
          */
-        [[nodiscard]] inline StatusFlagInterpreter getStatusFlags() const {
+        [[maybe_unused]] [[nodiscard]] inline StatusFlagInterpreter getStatusFlags() const {
             const auto optional{getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_FLAGS)};
             return optional ? StatusFlagInterpreter(QuietCastOptionalHelper<uint32_t>::castQuietly(optional))
                             : StatusFlagInterpreter(0x00000000);
@@ -217,73 +217,191 @@ namespace Device {
         /**
          * @return Get the current CPU load of the device.
          */
-        [[nodiscard]] inline uint64_t getCpuLoad() const {
-            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+        [[maybe_unused]] [[nodiscard]] inline uint64_t getCpuLoad(uint64_t otherwise = 0) const {
+            try
+            {
+                return QuietCastOptionalHelper<uint64_t>::castQuietly(
                     getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_LOAD_INDICATION));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::clog << "getCpuLoad:: cannot cast invalid argument from the device: " << e.what() << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::clog << "getCpuLoad:: cannot cast out of range value from the device: " << e.what() << std::endl;
+            }
+            return otherwise;
         }
 
         /**
          * @return Get the internal raw system time of the device.
          */
-        [[nodiscard]] inline uint64_t getRawSystemTime() const {
-            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+        [[maybe_unused]] [[nodiscard]] inline uint64_t getRawSystemTime(uint64_t otherwise = 0) const {
+            try
+            {
+                return QuietCastOptionalHelper<uint64_t>::castQuietly(
                     getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_SYSTEM_TIME_RAW));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::clog << "getRawSystemTime:: cannot cast invalid argument from the device: " << e.what() << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::clog << "getRawSystemTime:: cannot cast out of range value from the device: " << e.what() << std::endl;
+            }
+            return otherwise;
         }
 
         /**
          * @return Get the time since which the device has been turned on.
          */
-        [[nodiscard]] inline uint64_t getUptime() const {
-            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+        [[maybe_unused]] [[nodiscard]] inline uint64_t getUptime(uint64_t otherwise = 0) const {
+            try
+            {
+                return QuietCastOptionalHelper<uint64_t>::castQuietly(
                     getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_UP_TIME));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::clog << "getUptime:: cannot cast invalid argument from the device: " << e.what() << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::clog << "getUptime:: cannot cast out of range value from the device: " << e.what() << std::endl;
+            }
+            return otherwise;
         }
 
         /**
          * @return Get the number of power cycle of the device.
          */
-        [[nodiscard]] inline uint64_t getPowerCyclesCount() const {
-            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+        [[maybe_unused]] [[nodiscard]] inline uint64_t getPowerCyclesCount(uint64_t otherwise = 0) const {
+            try
+            {
+                return QuietCastOptionalHelper<uint64_t>::castQuietly(
                     getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_POWER_CYCLES));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::clog << "getPowerCyclesCount:: cannot cast invalid argument from the device: " << e.what()
+                          << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::clog << "getPowerCyclesCount:: cannot cast out of range value from the device: " << e.what()
+                          << std::endl;
+            }
+            return otherwise;
         }
 
         /**
          * @return Get the overall operating time of the device.
          */
-        [[nodiscard]] inline uint64_t getOperationTime() const {
-            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+        [[maybe_unused]] [[nodiscard]] inline uint64_t getOperationTime(uint64_t otherwise = 0) const {
+            try
+            {
+                return QuietCastOptionalHelper<uint64_t>::castQuietly(
                     getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_OPERATION_TIME));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::clog << "getOperationTime:: cannot cast invalid argument from the device: " << e.what() << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::clog << "getOperationTime:: cannot cast out of range value from the device: " << e.what() << std::endl;
+            }
+            return otherwise;
         }
 
         /**
          * @return Get the overall operating time scaled by temperature of the device.
          */
-        [[nodiscard]] inline uint64_t getScaledOperationTime() const {
-            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+        [[maybe_unused]] [[nodiscard]] inline uint64_t getScaledOperationTime(uint64_t otherwise = 0) const {
+            try
+            {
+                return QuietCastOptionalHelper<uint64_t>::castQuietly(
                     getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_OPERATION_TIME_SCALED));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::clog << "getScaledOperationTime:: cannot cast invalid argument from the device: " << e.what()
+                          << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::clog << "getScaledOperationTime:: cannot cast out of range value from the device: " << e.what()
+                          << std::endl;
+            }
+            return otherwise;
         }
 
         /**
          * @return Get the current temperature of the device.
          */
-        [[nodiscard]] inline uint64_t getCurrentTemperature() const {
-            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+        [[maybe_unused]] [[nodiscard]] inline uint64_t getCurrentTemperature(uint64_t otherwise = 0) const {
+            try
+            {
+                return QuietCastOptionalHelper<uint64_t>::castQuietly(
                     getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_CURRENT));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::clog << "getCurrentTemperature:: cannot cast invalid argument from the device: " << e.what()
+                          << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::clog << "getCurrentTemperature:: cannot cast out of range value from the device: " << e.what()
+                          << std::endl;
+            }
+            return otherwise;
         }
 
         /**
          * @return Get the minimal lifetime operating temperature of the device.
          */
-        [[nodiscard]] inline uint64_t getMinimalTemperature() const {
-            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+        [[maybe_unused]] [[nodiscard]] inline uint64_t getMinimalTemperature(uint64_t otherwise = 0) const {
+            try
+            {
+                return QuietCastOptionalHelper<uint64_t>::castQuietly(
                     getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_MIN));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::clog << "getMinimalTemperature:: cannot cast invalid argument from the device: " << e.what()
+                          << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::clog << "getMinimalTemperature:: cannot cast out of range value from the device: " << e.what()
+                          << std::endl;
+            }
+            return otherwise;
         }
 
         /**
          * @return Get the maximal lifetime operating temperature of the device.
          */
-        [[nodiscard]] inline uint64_t getMaximalTemperature() const {
-            return QuietCastOptionalHelper<uint64_t>::castQuietly(
+        [[maybe_unused]] [[nodiscard]] inline uint64_t getMaximalTemperature(uint64_t otherwise = 0) const {
+            try
+            {
+                return QuietCastOptionalHelper<uint64_t>::castQuietly(
                     getOptionalFromParameters(systemStatusMap, PARAMETER_STATUS_TEMPERATURE_MAX));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::clog << "getMaximalTemperature:: cannot cast invalid argument from the device: " << e.what()
+                          << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::clog << "getMaximalTemperature:: cannot cast out of range value from the device: " << e.what()
+                          << std::endl;
+            }
+            return otherwise;
         }
 
         /**
@@ -301,9 +419,13 @@ namespace Device {
     };
 
     class StatusWatcher {
+
+    public:
+        using SharedStatus = std::shared_ptr<DeviceStatus>;
+
+    private:
         using LockType = std::mutex;
         using Cv = std::condition_variable;
-        using SharedStatus = std::shared_ptr<DeviceStatus>;
         using OnStatusAvailableCallback = std::function<void(SharedStatus)>;
         using OnDeviceConnected = std::function<void()>;
         using OnDeviceDisconnected = std::function<void()>;
@@ -364,6 +486,16 @@ namespace Device {
         };
 
         /**
+         * Set the number of consecutive request failures to reach before triggering a disconnection event.
+         * The time T it will takes for the Watcher to trigger the disconnection event is proportional to its period
+         * and the threshold: T >= threshold * period, given a number of consecutive failure equals to threshold.
+         * @param threshold The number of request failure to reach before triggering a disconnection event.
+         */
+        [[maybe_unused]] inline void setDisconnectionTriggerThreshold(std::int64_t threshold){
+            disconnectionTriggerThreshold.store(threshold, std::memory_order_release);
+        }
+
+        /**
          * Stop the watcher task.
          */
         virtual ~StatusWatcher();
@@ -420,5 +552,6 @@ namespace Device {
         std::vector<OnDeviceConnected> onDeviceConnectedCallbacks{};
         std::vector<OnDeviceDisconnected> onDeviceDisconnectedCallbacks{};
         std::atomic_bool isConnected{false};
+        std::atomic_uint64_t disconnectionTriggerThreshold{3};
     };
 } // namespace Device

@@ -39,20 +39,23 @@ void Device::StatusWatcher::statusWatcherTask() {
                                     .requestMinimalTemperature()
                                     .requestMaximalTemperature()
                                     .requestStatusFlags()};
+    auto disconnectionHitCount{0u};
     for (; !interruptFlag.load(std::memory_order_acquire);) {
         auto future{getParametersCommand.asyncExecute(1s, systemStatus)};
         if (!future) {
             std::clog << device->getName() << "StatusWatcher:: Device is busy." << std::endl;
         } else {
             const auto & [requestResult, obtainedParameters]{future->get()};
+            const auto disconnectionThreshold{disconnectionTriggerThreshold.load(std::memory_order_acquire)};
             std::scoped_lock scopedGuard{deviceConnectedCallbackLock, deviceDisconnectedCallbackLock};
             if (requestResult == RequestResult::SUCCESS) {
+                disconnectionHitCount = 0;
                 setStatusToOutputAndFireNewStatusEvent(std::make_shared<DeviceStatus>(obtainedParameters));
                 const auto wasConnected{isConnected.exchange(true, std::memory_order_release)};
                 if (!wasConnected) {
                     fireDeviceConnectionEvent();
                 }
-            } else {
+            } else if (++disconnectionHitCount >= disconnectionThreshold) {
                 const auto wasConnected{isConnected.exchange(false, std::memory_order_release)};
                 if (wasConnected) {
                     fireDeviceDisconnectionEvent();

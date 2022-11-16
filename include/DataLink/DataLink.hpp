@@ -401,6 +401,11 @@ namespace Device {
         void watchdogTask(std::chrono::seconds commandTimeout);
 
         /**
+         *
+         */
+        void stallMonitoringTask();
+
+        /**
          * Search through a byte range and extract a complete scan packet, then store it into a ScanFactory.
          * @tparam Iterator An iterator type that meet the requirements of LegacyInputIterator.
          * @param begin Start of the byte range to search and extract from.
@@ -485,6 +490,11 @@ namespace Device {
          * successfully sent to the device.
          */
         [[maybe_unused]] [[nodiscard]] virtual bool isAlive() const noexcept;
+
+        /**
+         * @return True if the data link is stalled alive by checking if a scan has been received lately.
+         */
+        [[maybe_unused]][[nodiscard]] virtual bool isStalled() const noexcept;
 
         /**
          * @return The last scan received by this DataLink. This method is wait-free and lock-free.
@@ -594,14 +604,18 @@ namespace Device {
 
     private:
         std::optional<std::future<void>> watchdogTaskFuture{std::nullopt};
+        std::future<void> stallMonitoringFuture{};
         std::uint64_t scanCounter{0u};
-        ConditionVariable interruptCv{};
-        LockType interruptCvLock{};
+        ConditionVariable interruptWatchdogCv{};
+        ConditionVariable interruptStallMonitoringCv{};
+        LockType interruptWatchdogCvLock{};
         LockType onDataLinkConnectionLostCallbackLock{};
         LockType onNewScanAvailableCallbackLock{};
+        LockType interruptStallMonitoringCvLock{};
         std::atomic_bool interruptFlag{false};
         std::vector<OnDataLinkConnectionLost> onDataLinkConnectionLostCallbacks{};
         std::vector<OnNewScanAvailable> onNewScanAvailableCallbacks{};
+
     protected:
         SharedScan lastScanReceived{std::make_shared<Data::Scan>()};
         ConditionVariable scanAvailableCv{};
@@ -609,5 +623,6 @@ namespace Device {
         std::shared_ptr<R2000> device{nullptr};
         std::shared_ptr<DeviceHandle> deviceHandle{nullptr};
         std::atomic_bool isConnected{false};
+        std::atomic_bool isDataLinkStalled{false};
     };
 } // namespace Device
