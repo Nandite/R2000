@@ -419,9 +419,13 @@ namespace Device {
     };
 
     class StatusWatcher {
+
+    public:
+        using SharedStatus = std::shared_ptr<DeviceStatus>;
+
+    private:
         using LockType = std::mutex;
         using Cv = std::condition_variable;
-        using SharedStatus = std::shared_ptr<DeviceStatus>;
         using OnStatusAvailableCallback = std::function<void(SharedStatus)>;
         using OnDeviceConnected = std::function<void()>;
         using OnDeviceDisconnected = std::function<void()>;
