@@ -84,6 +84,11 @@ int main(int argc, char** argv)
     while (!interruptProgram)
     {
         std::this_thread::sleep_for(1s);
+        if(dataLink->isStalled())
+        {
+            std::clog << "Data link has stalled" << std::endl;
+            break;
+        }
     }
     std::cout << std::endl << "Stopping scan acquisition." << std::endl;
     return EXIT_SUCCESS;

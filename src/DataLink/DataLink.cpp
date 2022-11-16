@@ -33,6 +33,7 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<Devic
                     if (deviceHandle->isWatchdogEnabled()) {
                         watchdogTaskFuture = std::async(std::launch::async, &DataLink::watchdogTask, this, 1s);
                     }
+                    stallMonitoringFuture = std::async(std::launch::async, &DataLink::stallMonitoringTask, this);
                 } else {
                     std::clog << device->getName() << "::DataLink::Could not request the device to start the stream ("
                               << requestResultToString(result) << ")" << std::endl;
@@ -48,14 +49,16 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<Devic
 Device::DataLink::~DataLink() {
     if (!interruptFlag.load(std::memory_order_acquire)) {
         {
-            std::unique_lock<LockType> guard{interruptCvLock, std::adopt_lock};
+            std::scoped_lock guard{interruptWatchdogCvLock, interruptStallMonitoringCvLock};
             interruptFlag.store(true, std::memory_order_release);
-            interruptCv.notify_one();
+            interruptWatchdogCv.notify_one();
+            interruptStallMonitoringCv.notify_one();
         }
         scanAvailableCv.notify_all();
         if (watchdogTaskFuture) {
             watchdogTaskFuture->wait();
         }
+        stallMonitoringFuture.wait();
 
         auto stopScanFuture{Device::Commands::StopScanCommand{*device}.asyncExecute(*deviceHandle, 1s)};
         if (stopScanFuture) {
@@ -82,6 +85,10 @@ bool Device::DataLink::isAlive() const noexcept {
     return isConnected.load(std::memory_order_acquire);
 }
 
+bool Device::DataLink::isStalled() const noexcept{
+    return isDataLinkStalled.load(std::memory_order_acquire);
+}
+
 void Device::DataLink::watchdogTask(std::chrono::seconds commandTimeout) {
     const auto taskName{device->getName() + ".Watchdog"};
     pthread_setname_np(pthread_self(), taskName.c_str());
@@ -102,8 +109,26 @@ void Device::DataLink::watchdogTask(std::chrono::seconds commandTimeout) {
                 }
             }
         }
-        std::unique_lock<LockType> guard{interruptCvLock, std::adopt_lock};
-        interruptCv.wait_for(guard, watchdogTimeout,
+        std::unique_lock<LockType> guard{interruptWatchdogCvLock, std::adopt_lock};
+        interruptWatchdogCv.wait_for(guard, watchdogTimeout,
                              [&]() -> bool { return interruptFlag.load(std::memory_order_acquire); });
+    }
+}
+
+void Device::DataLink::stallMonitoringTask(){
+    const auto taskName{device->getName() + ".sd"};
+    pthread_setname_np(pthread_self(), taskName.c_str());
+    std::this_thread::sleep_for(10s); // Delay the start of the monitor
+    for (; !interruptFlag.load(std::memory_order_acquire);)
+    {
+        const auto lastReceivedScanTimestamp{getLastScan()->getTimestamp()};
+        const auto now{std::chrono::steady_clock::now()};
+        if (isAlive() && lastReceivedScanTimestamp + 6s <= now){
+            isDataLinkStalled.store(true, std::memory_order_release);
+            return;
+        }
+        std::unique_lock<LockType> guard{interruptStallMonitoringCvLock, std::adopt_lock};
+        interruptStallMonitoringCv.wait_for(guard, 3s,
+                                           [&]() -> bool { return interruptFlag.load(std::memory_order_acquire); });
     }
 }
