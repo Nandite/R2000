@@ -21,6 +21,7 @@
 #include "Control/DeviceHandle.hpp"
 #include "R2000.hpp"
 #include <Control/Commands.hpp>
+#include <thread>
 
 Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<DeviceHandle> iHandle,
                            std::chrono::milliseconds connectionTimeout)
