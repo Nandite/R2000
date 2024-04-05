@@ -29,7 +29,6 @@ Device::DataLink::DataLink(std::shared_ptr<R2000> iDevice, std::shared_ptr<Devic
             *deviceHandle,
             [&](const auto &result) -> void {
                 if (result == RequestResult::SUCCESS) {
-                    isConnected.store(true, std::memory_order_release);
                     if (deviceHandle->isWatchdogEnabled()) {
                         watchdogTaskFuture = std::async(std::launch::async, &DataLink::watchdogTask, this, 1s);
                     }
@@ -55,10 +54,12 @@ Device::DataLink::~DataLink() {
             interruptStallMonitoringCv.notify_one();
         }
         scanAvailableCv.notify_all();
-        if (watchdogTaskFuture) {
-            watchdogTaskFuture->wait();
+        if (watchdogTaskFuture.valid()) {
+            watchdogTaskFuture.wait();
         }
-        stallMonitoringFuture.wait();
+        if (stallMonitoringFuture.valid()){
+            stallMonitoringFuture.wait();
+        }
 
         auto stopScanFuture{Device::Commands::StopScanCommand{*device}.asyncExecute(*deviceHandle, 1s)};
         if (stopScanFuture) {

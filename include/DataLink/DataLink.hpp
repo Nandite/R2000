@@ -603,7 +603,7 @@ namespace Device {
         }
 
     private:
-        std::optional<std::future<void>> watchdogTaskFuture{std::nullopt};
+        std::future<void> watchdogTaskFuture{};
         std::future<void> stallMonitoringFuture{};
         std::uint64_t scanCounter{0u};
         ConditionVariable interruptWatchdogCv{};
@@ -622,7 +622,7 @@ namespace Device {
         LockType waitForScanLock{};
         std::shared_ptr<R2000> device{nullptr};
         std::shared_ptr<DeviceHandle> deviceHandle{nullptr};
-        std::atomic_bool isConnected{false};
+        std::atomic_bool isConnected{true};
         std::atomic_bool isDataLinkStalled{false};
     };
 } // namespace Device
